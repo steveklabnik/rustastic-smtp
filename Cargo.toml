@@ -1,0 +1,5 @@
+[package]
+
+name = "rustastic-smtp"
+version = "0.0.1"
+authors = ["Conrad Kleinespel <conradk@conradk.com>"]
