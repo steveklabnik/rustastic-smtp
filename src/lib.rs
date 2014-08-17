@@ -177,8 +177,6 @@ pub enum MailboxParseError {
     DomainTooLong,
     /// The maximum length of 254 octets (256 - 2 for punctuaction) [as per RFC 5321](http://tools.ietf.org/html/rfc5321#section-4.5.3.1.3) is exceeded.
     TooLong,
-    /// If there are characters left after the foreign part.
-    ExtraCharactersAtEnd,
     /// If no @ was present.
     AtNotFound
 }
