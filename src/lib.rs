@@ -1,5 +1,3 @@
-extern crate std;
-
 use std::string::{String};
 
 static MAX_MAILBOX_LOCAL_PART_LEN: uint = 64;
