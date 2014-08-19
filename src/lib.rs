@@ -1,9 +1,15 @@
+//! Rustastic SMTP is meant to provide SMTP tools such as email parsing
+//! utilities, an SMTP server, an SMTP client... At the moment, the library is
+//! barely usable and partly undocumented. The goal is to eventually comply with
+//! the [SMTP spec from RFC 5321](http://tools.ietf.org/html/rfc5321).
+
 use std::string::{String};
 
 static MAX_MAILBOX_LOCAL_PART_LEN: uint = 64;
 static MAX_MAILBOX_LEN: uint = 254;
 static MAX_DOMAIN_LEN: uint = 255;
 
+/// Represents the foreign part of an email address, aka the host.
 #[deriving(PartialEq, Eq, Clone, Show)]
 enum MailboxForeignPart {
     Domain(String),
@@ -11,6 +17,7 @@ enum MailboxForeignPart {
     Ipv6Addr(u16, u16, u16, u16, u16, u16, u16, u16)
 }
 
+/// Represents the local part of an email address, aka the username.
 #[deriving(PartialEq, Eq, Clone, Show)]
 struct MailboxLocalPart {
     // This is a version of the local part for use in the SMTP protocol. This is
@@ -157,12 +164,16 @@ fn test_foreign_part() {
     assert!(ipv6_1 != domain);
 }
 
+/// Represents an email address, aka "mailbox" in the SMTP spec.
+///
+/// It is composed of a local part and a foreign part.
 #[deriving(PartialEq, Eq, Clone, Show)]
 pub struct Mailbox {
     local_part: MailboxLocalPart,
     foreign_part: MailboxForeignPart
 }
 
+/// Represents an error that occured while trying to parse an email address.
 #[deriving(PartialEq, Eq, Show)]
 pub enum MailboxParseError {
     /// The maximum length of 64 octets [as per RFC 5321](http://tools.ietf.org/html/rfc5321#section-4.5.3.1.1) is exceeded.
@@ -180,6 +191,14 @@ pub enum MailboxParseError {
 }
 
 impl Mailbox {
+    /// Creates a `Mailbox` from a string if the string contains a valid email
+    /// address. Otherwise, returns a `MailboxParseError`.
+    ///
+    /// The argument should be of the form:
+    /// `hello@world.com`
+    /// This function does *not* expect anything to wrap the passed email
+    /// address. For example, this will result in an error:
+    /// `<hello@world.com>`
     pub fn parse(s: &str) -> Result<Mailbox, MailboxParseError> {
         let mut local_part: MailboxLocalPart;
         let mut foreign_part: MailboxForeignPart;
