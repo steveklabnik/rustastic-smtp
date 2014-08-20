@@ -74,4 +74,58 @@ impl<R: Reader> SmtpReader<R> {
 }
 
 #[test]
-fn test_reader() {}
+fn test_reader() {
+    let mut path: Path;
+    let mut file: super::std::io::fs::File;
+    let mut reader: SmtpReader<super::std::io::fs::File>;
+    let mut expected: String;
+
+    path = Path::new("tests/reader/0line1");
+    file = super::std::io::fs::File::open(&path).unwrap();
+    reader = SmtpReader::new(file);
+    assert!(!reader.read_line().is_ok());
+
+    path = Path::new("tests/reader/0line2");
+    file = super::std::io::fs::File::open(&path).unwrap();
+    reader = SmtpReader::new(file);
+    assert!(!reader.read_line().is_ok());
+
+    path = Path::new("tests/reader/0line3");
+    file = super::std::io::fs::File::open(&path).unwrap();
+    reader = SmtpReader::new(file);
+    assert!(!reader.read_line().is_ok());
+
+    path = Path::new("tests/reader/1line1");
+    file = super::std::io::fs::File::open(&path).unwrap();
+    reader = SmtpReader::new(file);
+    assert_eq!(reader.read_line().unwrap().as_slice(), "hello world!");
+    assert!(!reader.read_line().is_ok());
+
+    path = Path::new("tests/reader/1line2");
+    file = super::std::io::fs::File::open(&path).unwrap();
+    reader = SmtpReader::new(file);
+    assert_eq!(reader.read_line().unwrap().as_slice(), "hello world!");
+    assert!(!reader.read_line().is_ok());
+
+    path = Path::new("tests/reader/2lines1");
+    file = super::std::io::fs::File::open(&path).unwrap();
+    reader = SmtpReader::new(file);
+    assert_eq!(reader.read_line().unwrap().as_slice(), "hello world!");
+    assert_eq!(reader.read_line().unwrap().as_slice(), "bye bye world!");
+    assert!(!reader.read_line().is_ok());
+
+    expected = String::from_char(62, 'x');
+    path = Path::new("tests/reader/xlines1");
+    file = super::std::io::fs::File::open(&path).unwrap();
+    reader = SmtpReader::new(file);
+    assert_eq!(reader.read_line().unwrap(), expected);
+    assert_eq!(reader.read_line().unwrap(), expected);
+    assert_eq!(reader.read_line().unwrap(), expected);
+    assert_eq!(reader.read_line().unwrap(), expected);
+    assert_eq!(reader.read_line().unwrap(), expected);
+    assert_eq!(reader.read_line().unwrap(), expected);
+    assert_eq!(reader.read_line().unwrap(), expected);
+    assert_eq!(reader.read_line().unwrap(), expected);
+    assert_eq!(reader.read_line().unwrap(), expected);
+    assert!(!reader.read_line().is_ok());
+}
