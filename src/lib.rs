@@ -7,3 +7,11 @@ extern crate libc;
 
 pub mod reader;
 pub mod mailbox;
+pub mod server;
+
+//*
+fn main() {
+    let mut server = server::SmtpServer::new().unwrap();
+    server.run();
+}
+// */

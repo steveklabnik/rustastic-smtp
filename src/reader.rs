@@ -1,6 +1,5 @@
-use std::io::{Reader, IoResult, IoError};
+use std::io::{Reader, IoErrorKind, InvalidInput};
 use std::string::{String};
-use libc::{EOF};
 
 /// The maximum line size as specified by RFC 5321.
 static MAX_LINE_SIZE: uint = 512;
@@ -28,47 +27,33 @@ impl<R: Reader> SmtpReader<R> {
     }
 
     /// Read one line of input.
-    pub fn read_line(&mut self) -> IoResult<String> {
-        // First, we check if we have a line buffered already. If so, we return
-        // it straightaway. Else, we read more input and then try to find a
-        // line.
-        match self.read_buffered_line() {
-            Ok(res) => Ok(res),
-            Err(_) => match self.buffer_line() {
-                Err(e) => Err(e),
-                Ok(_) => {
-                    self.read_buffered_line()
-                }
+    pub fn read_line(&mut self) -> Result<String, IoErrorKind> {
+        self.vec.clear();
+        loop {
+            // If we have previously read 512 bytes and have not found a line,
+            // stop here.
+            if self.vec.len() == 512 {
+                return Err(InvalidInput)
             }
-        }
-    }
 
-    /// Get more input from the underlying reader.
-    fn buffer_line(&mut self) -> IoResult<uint> {
-        self.reader.push(
-            MAX_LINE_SIZE - self.vec.len(),
-            &mut self.vec
-        )
-    }
-
-    /// Read a line from the already buffered input.
-    fn read_buffered_line(&mut self) -> IoResult<String> {
-        // Try to find a CRLF sequence. If none is found, we'll return
-        // an error. Else, we'll return the String up to that sequence
-        // and rearrange the reader vector so no data is lost.
-        let or = self.vec.as_slice().position_elem(&13u8);
-        let on = self.vec.as_slice().position_elem(&10u8);
-        match (or, on) {
-            (Some(posr), Some(posn)) => if posn == posr + 1 {
-                let s = String::from_utf8_lossy(
-                    self.vec.slice_to(posr)
-                ).into_string();
-                self.vec = self.vec.slice_from(posn + 1).into_vec();
-                Ok(s)
-            } else {
-                Err(IoError::from_errno(EOF as uint, true))
-            },
-            _ => Err(IoError::from_errno(EOF as uint, true))
+            // Try to read one more byte and see if a line is formed.
+            let byte_res = self.reader.read_byte();
+            match byte_res {
+                Ok(b) => {
+                    self.vec.push(b);
+                    // A line ends with \r\n (or 13/10 in decimal), so we
+                    // check for these bytes at the end of our buffer.
+                    let len = self.vec.len();
+                    if len >= 2 {
+                        if self.vec[len - 2] == 13 && self.vec[len - 1] == 10 {
+                            return Ok(String::from_utf8_lossy(
+                                self.vec.slice_to(len - 2)
+                            ).into_string());
+                        }
+                    }
+                },
+                Err(e) => return Err(e.kind)
+            }
         }
     }
 }
