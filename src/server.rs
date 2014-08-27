@@ -1,6 +1,7 @@
 use std::io::net::tcp::{TcpListener, TcpAcceptor, TcpStream};
 use std::io::{Listener, Acceptor};
-use super::reader::{SmtpReader};
+use super::stream::{SmtpStream};
+use super::mailbox::{Mailbox, MailboxParseError};
 
 pub struct SmtpServer {
     acceptor: TcpAcceptor
@@ -12,8 +13,32 @@ pub enum SmtpServerError {
     ListenFailed
 }
 
-struct SmtpTransaction {
-    reader: SmtpReader<TcpStream>
+pub enum SmtpTransactionState {
+    Initial,
+    Helo,
+    Mail,
+    Rcpt,
+    Data
+}
+
+pub struct SmtpTransaction {
+    domain: Option<String>,
+    to: Option<Vec<Mailbox>>,
+    from: Option<Mailbox>,
+    data: Option<String>,
+    state: SmtpTransactionState
+}
+
+impl SmtpTransaction {
+    pub fn new() -> SmtpTransaction {
+        SmtpTransaction {
+            domain: None,
+            to: None,
+            from: None,
+            data: None,
+            state: Initial
+        }
+    }
 }
 
 impl SmtpServer {
@@ -38,19 +63,47 @@ impl SmtpServer {
     pub fn run(&mut self) {
         for mut stream_res in self.acceptor.incoming() {
             spawn(proc() {
-                let mut stream = stream_res.unwrap();
-                SmtpServer::handle_client(&mut stream);
+                // It's OK to unwrap here since even if this fails, the server
+                // will keep going: only this connection will be aborted.
+                SmtpServer::handle_client(stream_res.unwrap());
             });
         }
     }
 
-    fn handle_client(stream: &mut TcpStream) {
-        let mut reader = SmtpReader::new(stream.clone());
+    fn handle_client(s: TcpStream) {
+        let mut stream = SmtpStream::new(s);
+        let mut transaction = SmtpTransaction::new();
+
+        stream.write_line("220 rustastic.org");
         loop {
-            let line = reader.read_line();
-            match line {
-                Ok(s) => println!("command: {}", s),
-                Err(e) => fail!("{}", e)
+            let line = stream.read_line().unwrap();
+            match transaction.state {
+                Initial => {
+                    if line.as_slice().starts_with("HELO ") {
+                        transaction.state = Helo;
+                        transaction.domain = Some(
+                            line.as_slice().slice_from(5).into_string()
+                        );
+                    } else {
+                        stream.write_line("503 Bad sequence of commands");
+                    }
+                    println!("received nothing yet");
+                },
+                Helo => {
+                    println!("received helo");
+                    transaction.state = Mail;
+                },
+                Mail => {
+                    println!("received mail");
+                    transaction.state = Rcpt;
+                },
+                Rcpt => {
+                    println!("received rcpt");
+                    transaction.state = Data;
+                },
+                Data => {
+                    println!("received data");
+                }
             }
         }
     }
