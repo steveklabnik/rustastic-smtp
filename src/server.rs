@@ -3,6 +3,13 @@ use std::io::{Listener, Acceptor};
 use super::stream::{SmtpStream};
 use super::mailbox::{Mailbox, MailboxParseError};
 
+static handlers: &'static [HandlerDescription] = &[
+    ("HELO", "HELO ", &[Init], handle_command_helo)
+];
+
+type HandlerDescription = (&'static str, &'static str, &'static [SmtpTransactionState], HandlerFunction);
+type HandlerFunction = fn(&mut SmtpStream<TcpStream>, &mut SmtpTransaction);
+
 pub struct SmtpServer {
     acceptor: TcpAcceptor
 }
@@ -13,8 +20,9 @@ pub enum SmtpServerError {
     ListenFailed
 }
 
+#[deriving(PartialEq, Eq)]
 pub enum SmtpTransactionState {
-    Initial,
+    Init,
     Helo,
     Mail,
     Rcpt,
@@ -36,7 +44,7 @@ impl SmtpTransaction {
             to: None,
             from: None,
             data: None,
-            state: Initial
+            state: Init
         }
     }
 }
@@ -63,50 +71,44 @@ impl SmtpServer {
     pub fn run(&mut self) {
         for mut stream_res in self.acceptor.incoming() {
             spawn(proc() {
-                // It's OK to unwrap here since even if this fails, the server
-                // will keep going: only this connection will be aborted.
-                SmtpServer::handle_client(stream_res.unwrap());
+                // TODO: is there a better way to handle an error here?
+                let mut stream = SmtpStream::new(stream_res.unwrap());
+                let mut transaction = SmtpTransaction::new();
+
+                // Send the opening welcome message.
+                stream.write_line("220 rustastic.org");
+
+                // Forever, looooop over command lines and handle them.
+                'main_loop: loop {
+                    // Find the right handler.
+                    // TODO: check the return value and return appropriate error message,
+                    // ie "500 Command line too long".
+                    let line = stream.read_line().unwrap();
+                    for h in handlers.iter() {
+                        // Check that the begining of the command matches an existing SMTP
+                        // command. This could be something like "HELO " or "RCPT TO:".
+                        if line.as_slice().starts_with(*h.ref1()) {
+                            if h.ref2().contains(&transaction.state) {
+                                // We're good to go!
+                                (*h.ref3())(&mut stream, &mut transaction);
+                                continue 'main_loop;
+                            } else {
+                                // Bad sequence of commands.
+                                stream.write_line("503 Bad sequence of commands");
+                                continue 'main_loop;
+                            }
+                        }
+                    }
+                    // No valid command was given.
+                    stream.write_line("500 Command unrecognized");
+                }
             });
         }
     }
+}
 
-    fn handle_client(s: TcpStream) {
-        let mut stream = SmtpStream::new(s);
-        let mut transaction = SmtpTransaction::new();
-
-        stream.write_line("220 rustastic.org");
-        loop {
-            let line = stream.read_line().unwrap();
-            match transaction.state {
-                Initial => {
-                    if line.as_slice().starts_with("HELO ") {
-                        transaction.state = Helo;
-                        transaction.domain = Some(
-                            line.as_slice().slice_from(5).into_string()
-                        );
-                    } else {
-                        stream.write_line("503 Bad sequence of commands");
-                    }
-                    println!("received nothing yet");
-                },
-                Helo => {
-                    println!("received helo");
-                    transaction.state = Mail;
-                },
-                Mail => {
-                    println!("received mail");
-                    transaction.state = Rcpt;
-                },
-                Rcpt => {
-                    println!("received rcpt");
-                    transaction.state = Data;
-                },
-                Data => {
-                    println!("received data");
-                }
-            }
-        }
-    }
+fn handle_command_helo(stream: &mut SmtpStream<TcpStream>, transaction: &mut SmtpTransaction) {
+    ()
 }
 
 #[test]
