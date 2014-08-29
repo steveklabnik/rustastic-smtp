@@ -3,7 +3,7 @@
 There are a bunch of things to do. It is true that not all of them are fun, but all of them are
 useful and will need to be done at some point or another.
 
-If you are working on this or want on this, please open an issue so that other people know you are on it. This way, we don't all the same stuff.
+If you are working on this or want on this, please open an issue so that other people know you are on it. This way, we don't all do the same stuff.
 
 ## Things that are needed now
 
