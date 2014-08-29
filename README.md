@@ -4,4 +4,13 @@ This library is meant to provide SMTP tools such as email parsing utilities, an 
 
 If you would like to get involved, feel free to create an issue so we can discuss publicly and iterate on ideas together.
 
+```rust
+extern crate rsmtp;
+
+fn main() {
+    let mut server = server::SmtpServer::new().unwrap();
+    server.run();
+}
+```
+
 This project is licensed under the terms of the MIT license. A copy of the license if available [here](LICENSE).
