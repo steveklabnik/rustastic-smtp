@@ -7,7 +7,6 @@ If you are working on this or want on this, please open an issue so that other p
 
 ## Things that are needed now
 
-* More tests.
 * Switching the utils to using `Option` instead of `return 0` to convey the absence of something.
 * Remove calls to `unwrap` and actually handle errors.
 * Enable handling received mails with a configurable driver.
@@ -16,6 +15,8 @@ If you are working on this or want on this, please open an issue so that other p
 * Enforce configurable limits on `DATA` size and number of recipients.
 * Enable configuration of timeouts.
 * Actually read data from the client, not dummy data like it is now.
+* Documentation.
+* More tests.
 
 ## Things worth discussing but needed only later
 
