@@ -8,6 +8,7 @@ extern crate libc;
 pub mod stream;
 pub mod mailbox;
 pub mod server;
+mod utils;
 
 //*
 fn main() {

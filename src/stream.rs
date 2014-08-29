@@ -25,6 +25,11 @@ impl<S> SmtpStream<S> {
             vec: Vec::with_capacity(MAX_LINE_SIZE)
         }
     }
+
+    /// Read the data section of an email. Ends with "<CRLF>.<CRLF>".
+    pub fn read_data(&mut self) -> Result<String, IoErrorKind> {
+        Ok("Hello world!".into_string())
+    }
 }
 
 impl<R: Reader> SmtpStream<R> {
