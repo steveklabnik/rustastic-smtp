@@ -28,6 +28,8 @@ impl<S> SmtpStream<S> {
 
     /// Read the data section of an email. Ends with "<CRLF>.<CRLF>".
     pub fn read_data(&mut self) -> Result<String, IoErrorKind> {
+        println!("At the moment, the DATA command is fake. Wanna help us out?");
+        println!("https://github.com/conradkleinespel/rustastic-smtp");
         Ok("Hello world!".into_string())
     }
 }
