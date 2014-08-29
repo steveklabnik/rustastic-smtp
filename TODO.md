@@ -17,6 +17,7 @@ If you are working on this or want on this, please open an issue so that other p
 * Actually read data from the client, not dummy data like it is now.
 * Documentation.
 * More tests.
+* Case insensitive command name matching.
 
 ## Things worth discussing but needed only later
 
@@ -24,5 +25,7 @@ If you are working on this or want on this, please open an issue so that other p
 * More mail handling drivers (PostgreSQL, MySql, etc).
 * Email body parsing.
 * Allow mail relaying.
+* Implement EXPN & VRFY.
+* Make commands optional via configuration.
 
 Other ideas? Let us know the issues :-)

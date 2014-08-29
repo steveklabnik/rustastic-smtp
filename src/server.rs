@@ -5,15 +5,20 @@ use super::mailbox::{Mailbox};
 use super::{utils};
 
 static handlers: &'static [HandlerDescription] = &[
-    ("HELO", "HELO ", &[Init], handle_command_helo),
-    ("MAIL", "MAIL FROM:", &[Helo], handle_command_mail),
-    ("RCPT", "RCPT TO:", &[Mail, Rcpt], handle_command_rcpt),
-    ("DATA", "DATA", &[Rcpt], handle_command_data)
+    ("HELO ", &[Init], handle_command_helo),
+    ("EHLO", &[Init], handle_command_helo),
+    ("MAIL FROM:", &[Helo], handle_command_mail),
+    ("RCPT TO:", &[Mail, Rcpt], handle_command_rcpt),
+    ("DATA", &[Rcpt], handle_command_data),
+    ("RSET", &[Init, Helo, Mail, Rcpt, Data], handle_command_rset),
+    ("VRFY ", &[Init, Helo, Mail, Rcpt, Data], handle_command_vrfy),
+    ("EXPN ", &[Init, Helo, Mail, Rcpt, Data], handle_command_expn),
+    ("HELP", &[Init, Helo, Mail, Rcpt, Data], handle_command_help),
+    ("NOOP", &[Init, Helo, Mail, Rcpt, Data], handle_command_noop),
+    ("QUIT", &[Init, Helo, Mail, Rcpt, Data], handle_command_quit)
 ];
 
 type HandlerDescription = (
-    // The human readable name of the command
-    &'static str,
     // The prefix in the command sent by the client
     &'static str,
     // The list of allowed states for this command
@@ -64,10 +69,12 @@ impl SmtpTransaction {
     }
 
     pub fn reset(&mut self) {
-        self.to = Vec::new();
+        self.to.clear();
         self.from = None;
         self.data = None;
-        self.state = Helo;
+        if self.state != Init {
+            self.state = Helo;
+        }
     }
 }
 
@@ -109,13 +116,13 @@ impl SmtpServer {
                     for h in handlers.iter() {
                         // Check that the begining of the command matches an existing SMTP
                         // command. This could be something like "HELO " or "RCPT TO:".
-                        if line.as_slice().starts_with(*h.ref1()) {
-                            if h.ref2().contains(&transaction.state) {
+                        if line.as_slice().starts_with(*h.ref0()) {
+                            if h.ref1().contains(&transaction.state) {
                                 // We're good to go!
-                                (*h.ref3())(
+                                (*h.ref2())(
                                     &mut stream,
                                     &mut transaction,
-                                    line.as_slice().slice_from((*h.ref1()).len())
+                                    line.as_slice().slice_from((*h.ref0()).len())
                                 ).unwrap(); // TODO: avoid unwrap here
                                 continue 'main_loop;
                             } else {
@@ -205,8 +212,69 @@ fn handle_command_data(stream: &mut SmtpStream<TcpStream>,
         stream.write_line("354 Start mail input; end with <CRLF>.<CRLF>").unwrap();
         transaction.data = Some(stream.read_data().unwrap());
         transaction.state = Data;
-        stream.write_line("250 OK").unwrap();
+        // ... (here is where we'd handle the finished transaction)
         transaction.reset();
+        stream.write_line("250 OK").unwrap();
     }
     Ok(())
+}
+
+fn handle_command_rset(stream: &mut SmtpStream<TcpStream>,
+                       transaction: &mut SmtpTransaction,
+                       line: &str) -> Result<(), ()> {
+    if line.len() != 0 {
+        stream.write_line("501 No arguments allowed").unwrap();
+    } else {
+        transaction.reset();
+        stream.write_line("250 OK").unwrap();
+    }
+    Ok(())
+}
+
+#[allow(unused_variable)]
+fn handle_command_vrfy(stream: &mut SmtpStream<TcpStream>,
+                       transaction: &mut SmtpTransaction,
+                       line: &str) -> Result<(), ()> {
+    stream.write_line("252 Cannot VRFY user").unwrap();
+    Ok(())
+}
+
+#[allow(unused_variable)]
+fn handle_command_expn(stream: &mut SmtpStream<TcpStream>,
+                       transaction: &mut SmtpTransaction,
+                       line: &str) -> Result<(), ()> {
+    stream.write_line("252 Cannot EXPN mailing list").unwrap();
+    Ok(())
+}
+
+#[allow(unused_variable)]
+fn handle_command_help(stream: &mut SmtpStream<TcpStream>,
+                       transaction: &mut SmtpTransaction,
+                       line: &str) -> Result<(), ()> {
+    if line.len() == 0 || line.char_at(0) == ' ' {
+        stream.write_line("502 Command not implemented").unwrap();
+    } else {
+        stream.write_line("500 Command unrecognized").unwrap();
+    }
+    Ok(())
+}
+
+#[allow(unused_variable)]
+fn handle_command_noop(stream: &mut SmtpStream<TcpStream>,
+                       transaction: &mut SmtpTransaction,
+                       line: &str) -> Result<(), ()> {
+    if line.len() == 0 || line.char_at(0) == ' ' {
+        stream.write_line("250 OK").unwrap();
+    } else {
+        stream.write_line("500 Command unrecognized").unwrap();
+    }
+    Ok(())
+}
+
+#[allow(unused_variable)]
+fn handle_command_quit(stream: &mut SmtpStream<TcpStream>,
+                       transaction: &mut SmtpTransaction,
+                       line: &str) -> Result<(), ()> {
+    stream.write_line("221 rustastic.org").unwrap();
+    Err(())
 }
