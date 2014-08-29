@@ -19,11 +19,11 @@ static handlers: &'static [HandlerDescription] = &[
 ];
 
 type HandlerDescription = (
-    // The prefix in the command sent by the client
+    // The prefix in the command sent by the client.
     &'static str,
-    // The list of allowed states for this command
+    // The list of allowed states for this command.
     &'static [SmtpTransactionState],
-    // The handler function to call for this command
+    // The handler function to call for this command.
     HandlerFunction
 );
 
@@ -123,7 +123,7 @@ impl SmtpServer {
                                     &mut stream,
                                     &mut transaction,
                                     line.as_slice().slice_from((*h.ref0()).len())
-                                ).unwrap(); // TODO: avoid unwrap here
+                                ).unwrap(); // TODO: avoid unwrap here.
                                 continue 'main_loop;
                             } else {
                                 // Bad sequence of commands.

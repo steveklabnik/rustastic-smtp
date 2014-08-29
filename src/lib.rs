@@ -8,11 +8,6 @@ extern crate libc;
 pub mod stream;
 pub mod mailbox;
 pub mod server;
-mod utils;
 
-//*
-fn main() {
-    let mut server = server::SmtpServer::new().unwrap();
-    server.run();
-}
-// */
+// This is private at the moment because the API is far from stable.
+mod utils;
