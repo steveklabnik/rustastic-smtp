@@ -6,7 +6,7 @@
 //!
 //! # Example
 //!
-//! ```no_run
+//!
 //! extern crate rsmtp;
 //!
 //! use rsmtp::server;
@@ -16,7 +16,7 @@
 //!     println!("Listening on port 2525...");
 //!     server.run();
 //! }
-//! ```
+//! 
 
 extern crate libc;
 
