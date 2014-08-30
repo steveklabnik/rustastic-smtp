@@ -20,6 +20,11 @@ pub fn unescape_quoted_string(s: &str) -> String {
     out
 }
 
+#[test]
+fn test_unescape_quoted_string() {
+    fail!();
+}
+
 /// Returns a simplified version of a quoted string. This can be another
 /// quoted string or a dot string.
 ///
@@ -57,6 +62,11 @@ pub fn simplify_quoted_string(s: &str) -> String {
     out.push_char('"');
 
     out
+}
+
+#[test]
+fn test_simplify_quoted_string() {
+    fail!();
 }
 
 /// Returns the length of the longest subdomain found at the beginning

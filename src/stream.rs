@@ -94,7 +94,22 @@ impl<W: Writer> SmtpStream<W> {
 }
 
 #[test]
-fn test_reader() {
+fn test_new() {
+    fail!();
+}
+
+#[test]
+fn test_read_data() {
+    fail!();
+}
+
+#[test]
+fn test_write_line() {
+    fail!();
+}
+
+#[test]
+fn test_read_line() {
     let mut path: Path;
     let mut file: super::std::io::fs::File;
     let mut stream: SmtpStream<super::std::io::fs::File>;

@@ -20,14 +20,6 @@ fn test_static_vars() {
     assert_eq!(255, MAX_DOMAIN_LEN);
 }
 
-/// Represents the foreign part of an email address, aka the host.
-#[deriving(PartialEq, Eq, Clone, Show)]
-enum MailboxForeignPart {
-    Domain(String),
-    Ipv4Addr(u8, u8, u8, u8),
-    Ipv6Addr(u16, u16, u16, u16, u16, u16, u16, u16)
-}
-
 /// Represents the local part of an email address, aka the username.
 #[deriving(PartialEq, Eq, Clone, Show)]
 struct MailboxLocalPart {
@@ -95,6 +87,14 @@ fn test_local_part() {
 
     assert_eq!(lp5.smtp_string.as_slice(), "\"rust\\\\b;.c\\\"ool\"");
     assert_eq!(lp5.human_string.as_slice(), "rust\\b;.c\"ool");
+}
+
+/// Represents the foreign part of an email address, aka the host.
+#[deriving(PartialEq, Eq, Clone, Show)]
+enum MailboxForeignPart {
+    Domain(String),
+    Ipv4Addr(u8, u8, u8, u8),
+    Ipv6Addr(u16, u16, u16, u16, u16, u16, u16, u16)
 }
 
 #[test]

@@ -36,6 +36,11 @@ pub enum SmtpServerError {
     ListenFailed
 }
 
+#[test]
+fn test_smtp_server_error() {
+    fail!();
+}
+
 /// Represents the current state of an SMTP transaction.
 ///
 /// This is useful for checking if an incoming SMTP command is allowed at any given moment
@@ -47,6 +52,11 @@ pub enum SmtpTransactionState {
     Mail,
     Rcpt,
     Data
+}
+
+#[test]
+fn test_smtp_transaction_state() {
+    fail!();
 }
 
 /// Represents an SMTP transaction.
@@ -86,6 +96,16 @@ impl SmtpTransaction {
             self.state = Helo;
         }
     }
+}
+
+#[test]
+fn test_smtp_transaction_new() {
+    fail!();
+}
+
+#[test]
+fn test_smtp_transaction_reset() {
+    fail!();
 }
 
 impl SmtpServer<TcpStream, TcpAcceptor> {
@@ -169,6 +189,26 @@ impl<S: Writer+Reader+Send, A: Acceptor<S>> SmtpServer<S, A> {
     }
 }
 
+#[test]
+fn test_smtp_server_new() {
+    fail!();
+}
+
+#[test]
+fn test_smtp_server_new_from_acceptor() {
+    fail!();
+}
+
+#[test]
+fn test_smtp_server_handlers() {
+    fail!();
+}
+
+#[test]
+fn test_smtp_server_run() {
+    fail!();
+}
+
 fn handle_command_helo<S: Writer+Reader>(stream: &mut SmtpStream<S>,
                        transaction: &mut SmtpTransaction,
                        line: &str) -> Result<(), ()> {
@@ -181,6 +221,11 @@ fn handle_command_helo<S: Writer+Reader>(stream: &mut SmtpStream<S>,
         stream.write_line("250 OK").unwrap();
         Ok(())
     }
+}
+
+#[test]
+fn test_command_helo() {
+    fail!();
 }
 
 fn handle_command_mail<S: Writer+Reader>(stream: &mut SmtpStream<S>,
@@ -204,6 +249,11 @@ fn handle_command_mail<S: Writer+Reader>(stream: &mut SmtpStream<S>,
         }
         Ok(())
     }
+}
+
+#[test]
+fn test_command_mail() {
+    fail!();
 }
 
 fn handle_command_rcpt<S: Writer+Reader>(stream: &mut SmtpStream<S>,
@@ -232,6 +282,11 @@ fn handle_command_rcpt<S: Writer+Reader>(stream: &mut SmtpStream<S>,
     }
 }
 
+#[test]
+fn test_command_rcpt() {
+    fail!();
+}
+
 fn handle_command_data<S: Writer+Reader>(stream: &mut SmtpStream<S>,
                        transaction: &mut SmtpTransaction,
                        line: &str) -> Result<(), ()> {
@@ -248,6 +303,11 @@ fn handle_command_data<S: Writer+Reader>(stream: &mut SmtpStream<S>,
     Ok(())
 }
 
+#[test]
+fn test_command_data() {
+    fail!();
+}
+
 fn handle_command_rset<S: Writer+Reader>(stream: &mut SmtpStream<S>,
                        transaction: &mut SmtpTransaction,
                        line: &str) -> Result<(), ()> {
@@ -260,6 +320,11 @@ fn handle_command_rset<S: Writer+Reader>(stream: &mut SmtpStream<S>,
     Ok(())
 }
 
+#[test]
+fn test_command_rset() {
+    fail!();
+}
+
 #[allow(unused_variable)]
 fn handle_command_vrfy<S: Writer+Reader>(stream: &mut SmtpStream<S>,
                        transaction: &mut SmtpTransaction,
@@ -268,12 +333,22 @@ fn handle_command_vrfy<S: Writer+Reader>(stream: &mut SmtpStream<S>,
     Ok(())
 }
 
+#[test]
+fn test_command_vrfy() {
+    fail!();
+}
+
 #[allow(unused_variable)]
 fn handle_command_expn<S: Writer+Reader>(stream: &mut SmtpStream<S>,
                        transaction: &mut SmtpTransaction,
                        line: &str) -> Result<(), ()> {
     stream.write_line("252 Cannot EXPN mailing list").unwrap();
     Ok(())
+}
+
+#[test]
+fn test_command_expn() {
+    fail!();
 }
 
 #[allow(unused_variable)]
@@ -288,6 +363,11 @@ fn handle_command_help<S: Writer+Reader>(stream: &mut SmtpStream<S>,
     Ok(())
 }
 
+#[test]
+fn test_command_help() {
+    fail!();
+}
+
 #[allow(unused_variable)]
 fn handle_command_noop<S: Writer+Reader>(stream: &mut SmtpStream<S>,
                        transaction: &mut SmtpTransaction,
@@ -300,10 +380,20 @@ fn handle_command_noop<S: Writer+Reader>(stream: &mut SmtpStream<S>,
     Ok(())
 }
 
+#[test]
+fn test_command_noop() {
+    fail!();
+}
+
 #[allow(unused_variable)]
 fn handle_command_quit<S: Writer+Reader>(stream: &mut SmtpStream<S>,
                        transaction: &mut SmtpTransaction,
                        line: &str) -> Result<(), ()> {
     stream.write_line("221 rustastic.org").unwrap();
     Err(())
+}
+
+#[test]
+fn test_command_quit() {
+    fail!();
 }
