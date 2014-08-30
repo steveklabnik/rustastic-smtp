@@ -4,6 +4,7 @@ use super::stream::{SmtpStream};
 use super::mailbox::{Mailbox};
 use super::{utils};
 use std::sync::{Arc};
+use std::ascii::{OwnedAsciiExt};
 
 type HandlerDescription<S> = (
     // The prefix in the command sent by the client.
@@ -163,9 +164,11 @@ impl<S: Writer+Reader+Send, A: Acceptor<S>> SmtpServer<S, A> {
                     // ie "500 Command line too long".
                     let line = stream.read_line().unwrap();
                     for h in local_handlers.iter() {
+                        let line_start = line.as_slice().slice_to(h.ref0().len())
+                            .into_string().into_ascii_upper();
                         // Check that the begining of the command matches an existing SMTP
                         // command. This could be something like "HELO " or "RCPT TO:".
-                        if line.as_slice().starts_with(h.ref0().as_slice()) {
+                        if line_start.as_slice().starts_with(h.ref0().as_slice()) {
                             if h.ref1().contains(&transaction.state) {
                                 // We're good to go!
                                 (*h.ref2())(

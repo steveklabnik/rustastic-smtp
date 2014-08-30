@@ -7,7 +7,6 @@ If you are working on this or want on this, please open an issue so that other p
 
 ## Things that are needed now
 
-* Case insensitive command name matching.
 * Configuration:
     * Recipient email address handler.
     * Finished transaction handler (to save mail somewhere).
