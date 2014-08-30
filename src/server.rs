@@ -18,16 +18,13 @@ type HandlerFunction<S> = fn(&mut SmtpStream<S>,
                              &mut SmtpTransaction,
                              &str) -> Result<(), ()>;
 
-/// Represents an SMTP server which handles client transactions over TCP.
-///
-///
 pub type SmtpServer = AbstractSmtpServer<TcpStream, TcpAcceptor>;
 
 /// Represents an SMTP server which handles client transactions with any kind of stream.
 ///
 /// This is useful for testing purposes as we can test the server from a plain text file. For
 /// regular use, it is simplified via the `SmtpServer` type, which uses a `TcpStream` by default.
-struct AbstractSmtpServer<S: 'static+Writer+Reader, A: Acceptor<S>> {
+pub struct AbstractSmtpServer<S: 'static+Writer+Reader, A: Acceptor<S>> {
     // Underlying acceptor that allows accepting client connections to handle them.
     acceptor: A
 }

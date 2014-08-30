@@ -9,10 +9,10 @@
 //! ```no_run
 //! extern crate rsmtp;
 //!
-//! use rsmtp::server;
+//! use rsmtp::server::{AbstractSmtpServer, SmtpServer};
 //!
 //! fn main() {
-//!     let mut server = server::SmtpServer::new().unwrap();
+//!     let mut server: SmtpServer = AbstractSmtpServer::new().unwrap();
 //!     println!("Listening on port 2525...");
 //!     server.run();
 //! }
