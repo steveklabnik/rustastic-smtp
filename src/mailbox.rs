@@ -29,11 +29,11 @@ pub struct MailboxLocalPart {
     ///
     /// This is either a dot-string or a quoted-string, whatever is shortest as
     /// recommended in RFC 5321.
-    smtp_string: String,
+    pub smtp_string: String,
     /// This is a version of the local part that is completely unescaped.
     ///
     /// It is human readable but not suitable for use in SMTP.
-    human_string: String
+    pub human_string: String
 }
 
 impl MailboxLocalPart {

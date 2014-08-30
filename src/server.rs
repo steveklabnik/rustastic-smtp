@@ -162,7 +162,7 @@ impl<S: Writer+Reader+Send, A: Acceptor<S>> SmtpServer<S, A> {
                     // TODO: check the return value and return appropriate error message,
                     // ie "500 Command line too long".
                     let line = stream.read_line().unwrap();
-                    for h in local_handlers.deref().iter() {
+                    for h in local_handlers.iter() {
                         // Check that the begining of the command matches an existing SMTP
                         // command. This could be something like "HELO " or "RCPT TO:".
                         if line.as_slice().starts_with(h.ref0().as_slice()) {

@@ -1,4 +1,3 @@
-
 /// Returns a completely unescaped version of a quoted string.
 ///
 /// This is useful for showing the email to a human, as it is easier to read.
@@ -22,7 +21,9 @@ pub fn unescape_quoted_string(s: &str) -> String {
 
 #[test]
 fn test_unescape_quoted_string() {
-    fail!();
+    assert_eq!("b{}\"la.bla", unescape_quoted_string("\"b{}\\\"la\\.\\bla\"").as_slice());
+    assert_eq!("", unescape_quoted_string("\"\"").as_slice());
+    assert_eq!("a\\", unescape_quoted_string("\"a\\\\\"").as_slice());
 }
 
 /// Returns a simplified version of a quoted string. This can be another
@@ -66,7 +67,10 @@ pub fn simplify_quoted_string(s: &str) -> String {
 
 #[test]
 fn test_simplify_quoted_string() {
-    fail!();
+    assert_eq!("\"b{}\\\"la.bla\"", simplify_quoted_string("\"b{}\\\"la\\.\\bla\"").as_slice());
+    assert_eq!("", simplify_quoted_string("\"\"").as_slice());
+    assert_eq!("\"a\\\\\"", simplify_quoted_string("\"a\\\\\"").as_slice());
+    assert_eq!("a{", simplify_quoted_string("\"a\\{\"").as_slice());
 }
 
 /// Returns the length of the longest subdomain found at the beginning
