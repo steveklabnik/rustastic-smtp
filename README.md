@@ -22,7 +22,9 @@ fn main() {
 }
 ```
 
-There is also [an example SMTP server], so that you can quickly see it running:
+There is also
+[an example SMTP server](https://github.com/conradkleinespel/rustastic-smtp-test-server), so that
+you can quickly see it running:
 ```shell
 git clone https://github.com/conradkleinespel/rustastic-smtp-test-server.git
 cd rustastic-smtp-test-server
