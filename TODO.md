@@ -7,25 +7,29 @@ If you are working on this or want on this, please open an issue so that other p
 
 ## Things that are needed now
 
-* Switching the utils to using `Option` instead of `return 0` to convey the absence of something.
-* Remove calls to `unwrap` and actually handle errors.
-* Enable handling received mails with a configurable driver.
+* Case insensitive command name matching.
+* Configuration:
+    * Recipient email address handler.
+    * Finished transaction handler (to save mail somewhere).
+    * Timeouts.
+    * Maximum number of recipients.
+    * Maximum email body size.
+    * Error handler.
 * Allow empty reverse path, aka `<>`, in `MAIL` command.
-* Enforce configurable limits on `DATA` size and number of recipients.
-* Enable configuration of timeouts.
+* Remove calls to `unwrap` and actually handle errors.
 * Documentation.
 * More tests.
-* Case insensitive command name matching.
-* Make MailboxLocalPart public and make constructors returns options rather than assuming arguments are valid.
 
 ## Things worth discussing but needed only later
 
+* Handling of mail with a fixed size threadpool?
 * ESMTP support and most common extensions.
 * More mail handling drivers (PostgreSQL, MySql, etc).
-* Email body parsing.
 * Allow mail relaying.
 * Implement EXPN & VRFY.
 * Make commands optional via configuration.
+* Switching the utils to using `Option` instead of `return 0` to convey the absence of something.
+* Make safe (return `Option`) public versions of `MailboxLocalPart` functions.
 
 ## Other ideas
 
