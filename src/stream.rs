@@ -2,7 +2,7 @@ use std::io::{Reader, Writer, IoErrorKind, InvalidInput};
 use std::string::{String};
 
 /// The maximum line size as specified by RFC 5321.
-pub static MAX_LINE_SIZE: uint = 512;
+static MAX_LINE_SIZE: uint = 512;
 
 #[test]
 fn test_static_vars() {
@@ -11,8 +11,8 @@ fn test_static_vars() {
 
 /// A stream specially made for reading SMTP commands.
 ///
-/// It reads lines of input delimited by the <CRLF> sequence and with a maximum
-/// size of 512 bytes, including the command word and the <CRLF> sequence. If
+/// It reads lines of input delimited by the &lt;CRLF&gt; sequence and with a maximum
+/// size of 512 bytes, including the command word and the &lt;CRLF&gt; sequence. If
 /// the input is not UTF8, non-UTF8 characters are replaced with `U+FFFD
 /// REPLACEMENT CHARACTER` but no error is returned.
 ///
@@ -40,16 +40,16 @@ impl<S> SmtpStream<S> {
             vec: Vec::with_capacity(MAX_LINE_SIZE)
         }
     }
+}
 
-    /// Read the data section of an email. Ends with "<CRLF>.<CRLF>".
+impl<R: Reader> SmtpStream<R> {
+    /// Read the data section of an email. Ends with "&lt;CRLF&gt;.&lt;CRLF&gt;".
     pub fn read_data(&mut self) -> Result<String, IoErrorKind> {
         println!("At the moment, the DATA command is fake. Wanna help us out?");
         println!("https://github.com/conradkleinespel/rustastic-smtp");
         Ok("Hello world!".into_string())
     }
-}
 
-impl<R: Reader> SmtpStream<R> {
     /// Read one line of input.
     pub fn read_line(&mut self) -> Result<String, IoErrorKind> {
         self.vec.clear();
@@ -84,7 +84,7 @@ impl<R: Reader> SmtpStream<R> {
 }
 
 impl<W: Writer> SmtpStream<W> {
-    /// Write a line ended with CRLF.
+    /// Write a line ended with &lt;CRLF&gt;.
     pub fn write_line(&mut self, s: &str) -> Result<(), ()> {
         match self.stream.write_str(format!("{}\r\n", s).as_slice()) {
             Ok(_) => Ok(()),
