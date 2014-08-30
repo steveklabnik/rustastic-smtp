@@ -15,8 +15,17 @@ extern crate rsmtp;
 
 fn main() {
     let mut server = server::SmtpServer::new().unwrap();
+    println!("Listening on port 2525...");
     server.run();
 }
+```
+
+There is also [an example SMTP server], so that you can quickly see it running:
+```shell
+git clone https://github.com/conradkleinespel/rustastic-smtp-test-server.git
+cd rustastic-smtp-test-server
+cargo build
+./target/smtp-test-server
 ```
 
 # Documentation
