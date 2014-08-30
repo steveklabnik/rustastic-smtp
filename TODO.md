@@ -10,7 +10,6 @@ If you are working on this or want on this, please open an issue so that other p
 * Switching the utils to using `Option` instead of `return 0` to convey the absence of something.
 * Remove calls to `unwrap` and actually handle errors.
 * Enable handling received mails with a configurable driver.
-* Support Ipv4 and Ipv6 address literals in commands.
 * Allow empty reverse path, aka `<>`, in `MAIL` command.
 * Enforce configurable limits on `DATA` size and number of recipients.
 * Enable configuration of timeouts.

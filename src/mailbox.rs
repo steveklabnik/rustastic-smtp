@@ -1,5 +1,7 @@
 use std::string::{String};
 use super::{utils};
+use std::io::net::{ip};
+use std::from_str::{FromStr};
 
 /// Maximum length of the local part.
 static MAX_MAILBOX_LOCAL_PART_LEN: uint = 64;
@@ -22,7 +24,7 @@ fn test_static_vars() {
 
 /// Represents the local part of an email address, aka the username.
 #[deriving(PartialEq, Eq, Clone, Show)]
-struct MailboxLocalPart {
+pub struct MailboxLocalPart {
     /// This is a version of the local part for use in the SMTP protocol.
     ///
     /// This is either a dot-string or a quoted-string, whatever is shortest as
@@ -91,35 +93,24 @@ fn test_local_part() {
 
 /// Represents the foreign part of an email address, aka the host.
 #[deriving(PartialEq, Eq, Clone, Show)]
-enum MailboxForeignPart {
+pub enum MailboxForeignPart {
+    /// The foreign part is a domain name.
     Domain(String),
-    Ipv4Addr(u8, u8, u8, u8),
-    Ipv6Addr(u16, u16, u16, u16, u16, u16, u16, u16)
+    /// The foreign part is an ip address.
+    IpAddr(ip::IpAddr)
 }
 
 #[test]
 fn test_foreign_part() {
     let domain_text = "rustastic.org";
     let domain = Domain(domain_text.into_string());
-    let ipv4_1 = Ipv4Addr(127, 0, 0, 1);
-    let ipv4_2 = Ipv4Addr(192, 168, 21, 21);
-    let ipv6_1 = Ipv6Addr(1, 2, 3, 4, 5, 6, 7, 8);
-    let ipv6_2 = Ipv6Addr(8, 7, 6, 5, 4, 3, 2, 1);
+    let ipv4 = IpAddr(ip::Ipv4Addr(127, 0, 0, 1));
+    let ipv6 = IpAddr(ip::Ipv6Addr(1, 1, 1, 1, 1, 1, 1, 1));
 
     assert!(domain == domain);
     assert!(domain != Domain(domain_text.into_string() + "bullshit"));
-    assert!(domain != ipv4_1);
-    assert!(domain != ipv6_1);
-
-    assert!(ipv4_1.clone() == ipv4_1.clone());
-    assert!(ipv4_1.clone() != ipv4_2.clone());
-    assert!(ipv4_1 != ipv6_1);
-    assert!(ipv4_1 != domain);
-
-    assert!(ipv6_1.clone() == ipv6_1.clone());
-    assert!(ipv6_1.clone() != ipv6_2.clone());
-    assert!(ipv6_1 != ipv4_1);
-    assert!(ipv6_1 != domain);
+    assert!(domain != ipv4);
+    assert!(domain != ipv6);
 }
 
 /// Represents an email address, aka "mailbox" in the SMTP spec.
@@ -200,20 +191,41 @@ impl Mailbox {
         offset += 1;
 
         let domain_len = utils::get_domain_len(s.slice_from(offset));
-        // Do we have no valid domain ?
-        if domain_len == 0 {
-            return Err(ForeignPartUnrecognized);
+        if domain_len > 0 {
+            // Is the domain is too long ?
+            if domain_len > MAX_DOMAIN_LEN {
+                return Err(DomainTooLong);
+            }
+            // Save the domain.
+            foreign_part = Domain(
+                s.slice(offset, offset + domain_len).into_string()
+            );
+            offset += domain_len;
+        } else {
+            let ipv4_len = utils::get_possible_ipv4_len(s.slice_from(offset));
+            if ipv4_len > 0 {
+                match FromStr::from_str(s.slice(offset + 1, offset + ipv4_len - 1)) {
+                    Some(ip) => {
+                        foreign_part = IpAddr(ip);
+                        offset += ipv4_len;
+                    },
+                    _ => return Err(ForeignPartUnrecognized)
+                }
+            } else {
+                let ipv6_len = utils::get_possible_ipv6_len(s.slice_from(offset));
+                if ipv6_len > 0 {
+                    match FromStr::from_str(s.slice(offset + 6, offset + ipv6_len - 1)) {
+                        Some(ip) => {
+                            foreign_part = IpAddr(ip);
+                            offset += ipv6_len;
+                        },
+                        _ => return Err(ForeignPartUnrecognized)
+                    }
+                } else {
+                    return Err(ForeignPartUnrecognized);
+                }
+            }
         }
-        // Is the domain is too long ?
-        if domain_len > MAX_DOMAIN_LEN {
-            return Err(DomainTooLong);
-        }
-
-        // Save the domain.
-        foreign_part = Domain(
-            s.slice(offset, offset + domain_len).into_string()
-        );
-        offset += domain_len;
 
         // Example would be "rust.is@rustastic.org{}" where "rustastic.org{}"
         // would be considered an invalid domain name.
@@ -239,12 +251,15 @@ impl Mailbox {
 fn test_mailbox() {
     let path_1 = Mailbox::parse("rust.is@rustastic.org").unwrap();
     let path_2 = Mailbox::parse("rust.is.not@rustastic.org").unwrap();
+    let path_3 = Mailbox::parse("\"hello\"@rust").unwrap();
+    let path_4 = Mailbox::parse("rust.is@[127.0.0.1]").unwrap();
+    let path_5 = Mailbox::parse("rust.is@[Ipv6:::1]").unwrap();
+    let path_6 = Mailbox::parse("rust.is@[Ipv6:2001:db8::ff00:42:8329]").unwrap();
 
     assert!(path_1 == path_1.clone());
     assert!(path_2 == path_2.clone());
     assert!(path_1 != path_2);
 
-    let path_3 = Mailbox::parse("\"hello\"@rust").unwrap();
     assert_eq!(path_3.local_part.smtp_string.as_slice(), "hello");
     assert_eq!(path_3.local_part.human_string.as_slice(), "hello");
     assert_eq!(path_3.foreign_part, Domain("rust".into_string()));
@@ -281,4 +296,16 @@ fn test_mailbox() {
             .as_slice()
     ));
     assert_eq!(Err(AtNotFound), Mailbox::parse("t"));
+
+    assert_eq!(path_4.foreign_part, IpAddr(ip::Ipv4Addr(127, 0, 0, 1)));
+    assert_eq!(path_5.foreign_part, IpAddr(ip::Ipv6Addr(0, 0, 0, 0, 0, 0, 0, 1)));
+    assert_eq!(path_6.foreign_part, IpAddr(
+        ip::Ipv6Addr(0x2001, 0xdb8, 0x0, 0x0, 0x0, 0xff00, 0x42, 0x8329)
+    ));
+
+    assert_eq!(Err(ForeignPartUnrecognized), Mailbox::parse("rust.is@[127.0.0.1"));
+    assert_eq!(Err(ForeignPartUnrecognized), Mailbox::parse("rust.is@[00.0.1]"));
+    assert_eq!(Err(ForeignPartUnrecognized), Mailbox::parse("rust.is@[::1]"));
+    assert_eq!(Err(ForeignPartUnrecognized), Mailbox::parse("rust.is@[Ipv6: ::1]"));
+    assert_eq!(Err(ForeignPartUnrecognized), Mailbox::parse("rust.is@[Ipv6:::1"));
 }

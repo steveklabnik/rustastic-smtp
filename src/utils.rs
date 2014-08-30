@@ -3,7 +3,7 @@
 ///
 /// This is useful for showing the email to a human, as it is easier to read.
 pub fn unescape_quoted_string(s: &str) -> String {
-    let mut i: uint = 1; // start after the opening quote
+    let mut i = 1u; // start after the opening quote
     let mut out = String::with_capacity(s.len());
 
     // don't go until the end, since the last char is the closing quote
@@ -40,7 +40,7 @@ pub fn simplify_quoted_string(s: &str) -> String {
     // If we don't have a dot-string, remove useless escape sequences.
     out = String::with_capacity(s.len());
     out.push_char('"');
-    let mut i: uint = 1; // Start after the opening quote.
+    let mut i = 1u; // Start after the opening quote.
     while i < s.len() - 1 { // End before the closing quote.
         // If we have a regular char, add it.
         if is_qtext_smtp(s.char_at(i)) {
@@ -75,8 +75,8 @@ fn test_simplify_quoted_string() {
 /// A subdomain is as described
 /// [in RFC 5321](http://tools.ietf.org/html/rfc5321#section-4.1.2).
 pub fn get_subdomain_len(s: &str) -> uint {
-    let mut i: uint = 0;
-    let mut confirmed_min: uint = 0;
+    let mut i = 0u;
+    let mut confirmed_min = 0u;
     if s.len() == 0 {
         return 0
     }
@@ -164,7 +164,7 @@ fn test_get_domain_len() {
 /// An atom is as described
 /// [in RFC 5321](http://tools.ietf.org/html/rfc5321#section-4.1.2).
 pub fn get_atom_len(s: &str) -> uint {
-    let mut len: uint = 0;
+    let mut len = 0u;
     while len < s.len() {
         if is_atext(s.char_at(len)) {
             len += 1
@@ -320,7 +320,7 @@ pub fn get_quoted_string_len(s: &str) -> uint {
         return 0
     }
     // Length of 1 since we have the opening quote.
-    let mut len: uint = 1;
+    let mut len = 1u;
     loop {
         // Regular text.
         if len < s.len() && is_qtext_smtp(s.char_at(len)) {
@@ -435,10 +435,10 @@ fn test_get_at_domain_len() {
 /// [in RFC 5321](http://tools.ietf.org/html/rfc5321#section-4.1.2).
 pub fn get_source_route_len(s: &str) -> uint {
     // The total length we have found for source routes.
-    let mut len: uint = 0;
+    let mut len = 0u;
 
     // The length of the source route currently being checked in loop.
-    let mut curr_len: uint;
+    let mut curr_len;
 
     loop {
         // Get the current source route.
@@ -478,4 +478,54 @@ fn test_get_source_route_len() {
     // Valid.
     assert_eq!(13, get_source_route_len("@rust,@troll:"));
     assert_eq!(16, get_source_route_len("@rust.is,@troll:"));
+}
+
+pub fn get_possible_ipv6_len(ip: &str) -> uint {
+    if ip.len() < 7 || ip.slice_to(6) != "[Ipv6:" {
+        0
+    } else {
+        let mut i = 6u;
+        while i < ip.len() && ip.char_at(i) != ']' {
+            i += 1;
+        }
+        if i < ip.len() && ip.char_at(i) == ']' {
+            i + 1
+        } else {
+            0
+        }
+    }
+}
+
+#[test]
+fn test_get_possible_ipv6_len() {
+    assert_eq!(10, get_possible_ipv6_len("[Ipv6:434]"));
+    assert_eq!(10, get_possible_ipv6_len("[Ipv6:434][]"));
+    assert_eq!(0, get_possible_ipv6_len("[Ipv6:434"));
+    assert_eq!(7, get_possible_ipv6_len("[Ipv6:]"));
+    assert_eq!(7, get_possible_ipv6_len("[Ipv6:]a"));
+    assert_eq!(0, get_possible_ipv6_len("[Ipv"));
+}
+
+pub fn get_possible_ipv4_len(ip: &str) -> uint {
+    if ip.len() < 3 || ip.char_at(0) != '[' || ip.char_at(1) > '9' || ip.char_at(1) < '0' {
+        0
+    } else {
+        let mut i = 1u;
+        while i < ip.len() && ip.char_at(i) != ']' {
+            i += 1;
+        }
+        if i < ip.len() && ip.char_at(i) == ']' {
+            i + 1
+        } else {
+            0
+        }
+    }
+}
+
+#[test]
+fn test_get_possible_ipv4_len() {
+    assert_eq!(0, get_possible_ipv4_len("[Ipv6:]"));
+    assert_eq!(3, get_possible_ipv4_len("[1]"));
+    assert_eq!(3, get_possible_ipv4_len("[1]1"));
+    assert_eq!(0, get_possible_ipv4_len("[]"));
 }
