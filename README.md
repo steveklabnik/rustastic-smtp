@@ -13,10 +13,10 @@ iterate on ideas together.
 ```rust
 extern crate rsmtp;
 
-use rsmtp::server;
+use rsmtp::server::{SmtpServer};
 
 fn main() {
-    let mut server = server::SmtpServer::new().unwrap();
+    let mut server = SmtpServer::new().unwrap();
     println!("Listening on port 2525...");
     server.run();
 }

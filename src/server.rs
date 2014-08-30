@@ -1,5 +1,5 @@
-use std::io::net::tcp::{TcpAcceptor, TcpStream};
-use std::io::{Acceptor, Reader, Writer};
+use std::io::net::tcp::{TcpListener, TcpAcceptor, TcpStream};
+use std::io::{Listener, Acceptor, Reader, Writer};
 use super::stream::{SmtpStream};
 use super::mailbox::{Mailbox};
 use super::{utils};
@@ -18,25 +18,11 @@ type HandlerFunction<S> = fn(&mut SmtpStream<S>,
                              &mut SmtpTransaction,
                              &str) -> Result<(), ()>;
 
-pub type SmtpServer = AbstractSmtpServer<TcpStream, TcpAcceptor>;
-
-pub mod SmtpServer {
-    use super::super::std::io::net::tcp::{TcpListener};
-    use super::super::std::io::{Listener};
-    use super::{SmtpServer, AbstractSmtpServer, SmtpServerError};
-
-    pub fn new() -> Result<SmtpServer, SmtpServerError> {
-        let listener = TcpListener::bind("0.0.0.0", 2525).unwrap();
-        let acceptor = listener.listen().unwrap();
-        AbstractSmtpServer::new(acceptor)
-    }
-}
-
 /// Represents an SMTP server which handles client transactions with any kind of stream.
 ///
-/// This is useful for testing purposes as we can test the server from a plain text file. For
-/// regular use, it is simplified via the `AbstractSmtpServer` type, which uses a `TcpStream` by default.
-pub struct AbstractSmtpServer<S: 'static+Writer+Reader, A: Acceptor<S>> {
+/// This is useful for testing purposes as we can test the server from a plain text file. It
+/// should not be used for other purposes directly. Use `SmtpServer` instead.
+pub struct SmtpServer<S: 'static+Writer+Reader, A: Acceptor<S>> {
     // Underlying acceptor that allows accepting client connections to handle them.
     acceptor: A
 }
@@ -102,10 +88,19 @@ impl SmtpTransaction {
     }
 }
 
-impl<S: Writer+Reader+Send, A: Acceptor<S>> AbstractSmtpServer<S, A> {
+impl SmtpServer<TcpStream, TcpAcceptor> {
     /// Creates a new SMTP server that listens on `0.0.0.0:2525`.
-    pub fn new(acceptor: A) -> Result<AbstractSmtpServer<S, A>, SmtpServerError> {
-        Ok(AbstractSmtpServer {
+    pub fn new() -> Result<SmtpServer<TcpStream, TcpAcceptor>, SmtpServerError> {
+        let listener = TcpListener::bind("0.0.0.0", 2525).unwrap();
+        let acceptor = listener.listen().unwrap();
+        SmtpServer::new_from_acceptor(acceptor)
+    }
+}
+
+impl<S: Writer+Reader+Send, A: Acceptor<S>> SmtpServer<S, A> {
+    /// Creates a new SMTP server from an `Acceptor` implementor. Useful for testing.
+    pub fn new_from_acceptor(acceptor: A) -> Result<SmtpServer<S, A>, SmtpServerError> {
+        Ok(SmtpServer {
             acceptor: acceptor
         })
     }
