@@ -1,5 +1,5 @@
-use std::io::net::tcp::{TcpListener, TcpAcceptor, TcpStream};
-use std::io::{Listener, Acceptor, Reader, Writer};
+use std::io::net::tcp::{TcpAcceptor, TcpStream};
+use std::io::{Acceptor, Reader, Writer};
 use super::stream::{SmtpStream};
 use super::mailbox::{Mailbox};
 use super::{utils};
@@ -20,10 +20,19 @@ type HandlerFunction<S> = fn(&mut SmtpStream<S>,
 
 pub type SmtpServer = AbstractSmtpServer<TcpStream, TcpAcceptor>;
 
+pub mod SmtpServer {
+    use super::super::std::io::net::tcp::TcpAcceptor;
+    use super::{SmtpServer, AbstractSmtpServer, SmtpServerError};
+
+    pub fn new(acceptor: TcpAcceptor) -> Result<SmtpServer, SmtpServerError> {
+        AbstractSmtpServer::new(acceptor)
+    }
+}
+
 /// Represents an SMTP server which handles client transactions with any kind of stream.
 ///
 /// This is useful for testing purposes as we can test the server from a plain text file. For
-/// regular use, it is simplified via the `SmtpServer` type, which uses a `TcpStream` by default.
+/// regular use, it is simplified via the `AbstractSmtpServer` type, which uses a `TcpStream` by default.
 pub struct AbstractSmtpServer<S: 'static+Writer+Reader, A: Acceptor<S>> {
     // Underlying acceptor that allows accepting client connections to handle them.
     acceptor: A
@@ -92,20 +101,8 @@ impl SmtpTransaction {
 
 impl<S: Writer+Reader+Send, A: Acceptor<S>> AbstractSmtpServer<S, A> {
     /// Creates a new SMTP server that listens on `0.0.0.0:2525`.
-    pub fn new() -> Result<AbstractSmtpServer<TcpStream, TcpAcceptor>, SmtpServerError> {
-        let listener_res = TcpListener::bind("0.0.0.0", 2525);
-        if listener_res.is_err() {
-            return Err(BindFailed)
-        }
-        let listener = listener_res.unwrap();
-
-        let acceptor_res = listener.listen();
-        if acceptor_res.is_err() {
-            return Err(ListenFailed)
-        }
-        let acceptor = acceptor_res.unwrap();
-
-        Ok(SmtpServer {
+    pub fn new(acceptor: A) -> Result<AbstractSmtpServer<S, A>, SmtpServerError> {
+        Ok(AbstractSmtpServer {
             acceptor: acceptor
         })
     }

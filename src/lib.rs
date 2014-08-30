@@ -9,10 +9,14 @@
 //! ```no_run
 //! extern crate rsmtp;
 //!
-//! use rsmtp::server::{AbstractSmtpServer, SmtpServer};
+//! use rsmtp::server::{SmtpServer};
+//! use std::io::net::tcp::{TcpListener};
+//! use std::io::{Listener};
 //!
 //! fn main() {
-//!     let mut server: SmtpServer = AbstractSmtpServer::new().unwrap();
+//!     let listener = TcpListener::bind("0.0.0.0", 2525).unwrap();
+//!     let acceptor = listener.listen().unwrap();
+//!     let mut server = SmtpServer::new(acceptor).unwrap();
 //!     println!("Listening on port 2525...");
 //!     server.run();
 //! }
