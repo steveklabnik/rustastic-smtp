@@ -21,10 +21,13 @@ type HandlerFunction<S> = fn(&mut SmtpStream<S>,
 pub type SmtpServer = AbstractSmtpServer<TcpStream, TcpAcceptor>;
 
 pub mod SmtpServer {
-    use super::super::std::io::net::tcp::TcpAcceptor;
+    use super::super::std::io::net::tcp::{TcpListener};
+    use super::super::std::io::{Listener};
     use super::{SmtpServer, AbstractSmtpServer, SmtpServerError};
 
-    pub fn new(acceptor: TcpAcceptor) -> Result<SmtpServer, SmtpServerError> {
+    pub fn new() -> Result<SmtpServer, SmtpServerError> {
+        let listener = TcpListener::bind("0.0.0.0", 2525).unwrap();
+        let acceptor = listener.listen().unwrap();
         AbstractSmtpServer::new(acceptor)
     }
 }
