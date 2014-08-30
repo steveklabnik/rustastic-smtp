@@ -13,7 +13,6 @@ If you are working on this or want on this, please open an issue so that other p
 * Allow empty reverse path, aka `<>`, in `MAIL` command.
 * Enforce configurable limits on `DATA` size and number of recipients.
 * Enable configuration of timeouts.
-* Actually read data from the client, not dummy data like it is now.
 * Documentation.
 * More tests.
 * Case insensitive command name matching.
@@ -27,5 +26,9 @@ If you are working on this or want on this, please open an issue so that other p
 * Allow mail relaying.
 * Implement EXPN & VRFY.
 * Make commands optional via configuration.
+
+## Other ideas
+
+* Make stream readers & writers faster.
 
 Other ideas? Let us know the issues :-)

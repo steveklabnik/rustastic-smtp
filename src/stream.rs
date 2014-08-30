@@ -1,12 +1,20 @@
 use std::io::{Reader, Writer, IoErrorKind, InvalidInput};
 use std::string::{String};
+#[allow(unused_imports)]
+use std::io::{Truncate, Open, Read, Write};
+#[allow(unused_imports)]
+use std::io::fs::{File};
 
 /// The maximum line size as specified by RFC 5321.
 static MAX_LINE_SIZE: uint = 512;
 
+/// Default minimum data allocation.
+static DATA_ALLOC_SIZE: uint = 512;
+
 #[test]
 fn test_static_vars() {
     assert_eq!(512, MAX_LINE_SIZE);
+    assert_eq!(512, DATA_ALLOC_SIZE);
 }
 
 /// A stream specially made for reading SMTP commands.
@@ -45,9 +53,25 @@ impl<S> SmtpStream<S> {
 impl<R: Reader> SmtpStream<R> {
     /// Read the data section of an email. Ends with "&lt;CRLF&gt;.&lt;CRLF&gt;".
     pub fn read_data(&mut self) -> Result<String, IoErrorKind> {
-        println!("At the moment, the DATA command is fake. Wanna help us out?");
-        println!("https://github.com/conradkleinespel/rustastic-smtp");
-        Ok("Hello world!".into_string())
+        let mut data = String::with_capacity(DATA_ALLOC_SIZE);
+
+        loop {
+            let byte_res = self.stream.read_byte();
+            match byte_res {
+                Ok(b) => {
+                    data = data.append(String::from_byte(b).as_slice());
+                    if data.as_slice().ends_with("\r\n.\r\n") {
+                        let len = data.len();
+                        data.truncate(len - 5);
+                        break;
+                    }
+                },
+                Err(err) => {
+                    return Err(err.kind)
+                }
+            }
+        }
+        Ok(data)
     }
 
     /// Read one line of input.
@@ -76,7 +100,7 @@ impl<R: Reader> SmtpStream<R> {
                         }
                     }
                 },
-                Err(e) => return Err(e.kind)
+                Err(err) => return Err(err.kind)
             }
         }
     }
@@ -85,65 +109,93 @@ impl<R: Reader> SmtpStream<R> {
 
 impl<W: Writer> SmtpStream<W> {
     /// Write a line ended with &lt;CRLF&gt;.
-    pub fn write_line(&mut self, s: &str) -> Result<(), ()> {
+    pub fn write_line(&mut self, s: &str) -> Result<(), IoErrorKind> {
         match self.stream.write_str(format!("{}\r\n", s).as_slice()) {
             Ok(_) => Ok(()),
-            Err(_) => Err(())
+            Err(err) => Err(err.kind)
         }
     }
 }
 
 #[test]
 fn test_new() {
-    fail!();
+    // Testing via `test_read_line()`.
 }
 
 #[test]
 fn test_read_data() {
-    fail!();
+    let mut path: Path;
+    let mut file: File;
+    let mut stream: SmtpStream<File>;
+    let mut expected: String;
+
+    path = Path::new("tests/stream/data_ok");
+    file = File::open(&path).unwrap();
+    stream = SmtpStream::new(file);
+    expected = stream.read_data().unwrap();
+    assert_eq!("Hello world!\nBlabla\n", expected.as_slice());
 }
 
 #[test]
 fn test_write_line() {
-    fail!();
+    // Use a block so the file gets closed at the end of it.
+    {
+        let mut path_write: Path;
+        let mut file_write: File;
+        let mut stream: SmtpStream<File>;
+
+        path_write = Path::new("tests/stream/write_line");
+        file_write = File::open_mode(&path_write, Truncate, Write).unwrap();
+        stream = SmtpStream::new(file_write);
+        stream.write_line("HelloWorld").unwrap();
+        stream.write_line("ByeBye").unwrap();
+    }
+    let mut path_read: Path;
+    let mut file_read: File;
+    let mut expected: String;
+
+    path_read = Path::new("tests/stream/write_line");
+    file_read = File::open_mode(&path_read, Open, Read).unwrap();
+    expected = file_read.read_to_string().unwrap();
+    assert_eq!("HelloWorld\r\nByeBye\r\n", expected.as_slice());
 }
 
 #[test]
 fn test_read_line() {
     let mut path: Path;
-    let mut file: super::std::io::fs::File;
-    let mut stream: SmtpStream<super::std::io::fs::File>;
+    let mut file: File;
+    let mut stream: SmtpStream<File>;
     let mut expected: String;
 
     path = Path::new("tests/stream/0line1");
-    file = super::std::io::fs::File::open(&path).unwrap();
+    file = File::open(&path).unwrap();
     stream = SmtpStream::new(file);
     assert!(!stream.read_line().is_ok());
 
     path = Path::new("tests/stream/0line2");
-    file = super::std::io::fs::File::open(&path).unwrap();
+    file = File::open(&path).unwrap();
     stream = SmtpStream::new(file);
     assert!(!stream.read_line().is_ok());
 
     path = Path::new("tests/stream/0line3");
-    file = super::std::io::fs::File::open(&path).unwrap();
+    file = File::open(&path).unwrap();
     stream = SmtpStream::new(file);
     assert!(!stream.read_line().is_ok());
 
     path = Path::new("tests/stream/1line1");
-    file = super::std::io::fs::File::open(&path).unwrap();
+    file = File::open(&path).unwrap();
     stream = SmtpStream::new(file);
     assert_eq!(stream.read_line().unwrap().as_slice(), "hello world!");
     assert!(!stream.read_line().is_ok());
 
     path = Path::new("tests/stream/1line2");
-    file = super::std::io::fs::File::open(&path).unwrap();
+    file = File::open(&path).unwrap();
     stream = SmtpStream::new(file);
     assert_eq!(stream.read_line().unwrap().as_slice(), "hello world!");
     assert!(!stream.read_line().is_ok());
 
     path = Path::new("tests/stream/2lines1");
-    file = super::std::io::fs::File::open(&path).unwrap();
+    file = File::open(&path).unwrap();
     stream = SmtpStream::new(file);
     assert_eq!(stream.read_line().unwrap().as_slice(), "hello world!");
     assert_eq!(stream.read_line().unwrap().as_slice(), "bye bye world!");
@@ -151,7 +203,7 @@ fn test_read_line() {
 
     expected = String::from_char(62, 'x');
     path = Path::new("tests/stream/xlines1");
-    file = super::std::io::fs::File::open(&path).unwrap();
+    file = File::open(&path).unwrap();
     stream = SmtpStream::new(file);
     assert_eq!(stream.read_line().unwrap(), expected);
     assert_eq!(stream.read_line().unwrap(), expected);
