@@ -30,16 +30,25 @@ type HandlerDescription = (
 type HandlerFunction = fn(&mut SmtpStream<TcpStream>,
                           &mut SmtpTransaction, &str) -> Result<(), ()>;
 
+/// Represents an SMTP server which handles client transactions.
 pub struct SmtpServer {
+    // Underlying acceptor that allows accepting client connections to handle them.
     acceptor: TcpAcceptor
 }
 
+/// Represents an error during creation of an SMTP server.
 #[deriving(Show)]
 pub enum SmtpServerError {
+    /// The system call `bind` failed.
     BindFailed,
+    /// The system call `listen` failed.
     ListenFailed
 }
 
+/// Represents the current state of an SMTP transaction.
+///
+/// This is useful for checking if an incoming SMTP command is allowed at any given moment
+/// during an SMTP transaction.
 #[deriving(PartialEq, Eq)]
 pub enum SmtpTransactionState {
     Init,
@@ -49,15 +58,22 @@ pub enum SmtpTransactionState {
     Data
 }
 
+/// Represents an SMTP transaction.
 pub struct SmtpTransaction {
-    domain: Option<String>,
-    to: Vec<Mailbox>,
-    from: Option<Mailbox>,
-    data: Option<String>,
-    state: SmtpTransactionState
+    /// Domain name passed via `HELO`/`EHLO`.
+    pub domain: Option<String>,
+    /// A vector of recipients' email addresses.
+    pub to: Vec<Mailbox>,
+    /// The email address of the sender.
+    pub from: Option<Mailbox>,
+    /// The body of the email.
+    pub data: Option<String>,
+    /// The current state of the transaction.
+    pub state: SmtpTransactionState
 }
 
 impl SmtpTransaction {
+    /// Creates a new transaction.
     pub fn new() -> SmtpTransaction {
         SmtpTransaction {
             domain: None,
@@ -68,6 +84,9 @@ impl SmtpTransaction {
         }
     }
 
+    /// Resets the `to`, `from` and `data` fields, as well as the `state` of the transaction.
+    ///
+    /// This is used when a transaction ends and when `RSET` is sent by the client.
     pub fn reset(&mut self) {
         self.to.clear();
         self.from = None;
@@ -79,6 +98,7 @@ impl SmtpTransaction {
 }
 
 impl SmtpServer {
+    /// Creates a new SMTP server that listens on `0.0.0.0:2525`.
     pub fn new() -> Result<SmtpServer, SmtpServerError> {
         let listener_res = TcpListener::bind("0.0.0.0", 2525);
         if listener_res.is_err() {
@@ -97,6 +117,7 @@ impl SmtpServer {
         })
     }
 
+    /// Run the SMTP server.
     pub fn run(&mut self) {
         for mut stream_res in self.acceptor.incoming() {
             spawn(proc() {

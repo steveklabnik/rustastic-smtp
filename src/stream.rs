@@ -2,7 +2,12 @@ use std::io::{Reader, Writer, IoErrorKind, InvalidInput};
 use std::string::{String};
 
 /// The maximum line size as specified by RFC 5321.
-static MAX_LINE_SIZE: uint = 512;
+pub static MAX_LINE_SIZE: uint = 512;
+
+#[test]
+fn test_static_vars() {
+    assert_eq!(512, MAX_LINE_SIZE);
+}
 
 /// A stream specially made for reading SMTP commands.
 ///
@@ -11,7 +16,17 @@ static MAX_LINE_SIZE: uint = 512;
 /// the input is not UTF8, non-UTF8 characters are replaced with `U+FFFD
 /// REPLACEMENT CHARACTER` but no error is returned.
 ///
-/// Returns `EndOfFile` if no line is found within 512 bytes of input.
+/// Returns `InvalidInput` if no line is found within 512 bytes of input.
+///
+/// # Example
+/// ```no_run
+/// use std::io::TcpStream;
+/// use rsmtp::stream::SmtpStream;
+///
+/// let mut smtp = SmtpStream::new(TcpStream::connect("127.0.0.1", 2525).unwrap());
+///
+/// println!("{}", smtp.read_line().unwrap());
+/// ```
 pub struct SmtpStream<S> {
     stream: S,
     vec: Vec<u8>
@@ -35,7 +50,6 @@ impl<S> SmtpStream<S> {
 }
 
 impl<R: Reader> SmtpStream<R> {
-
     /// Read one line of input.
     pub fn read_line(&mut self) -> Result<String, IoErrorKind> {
         self.vec.clear();

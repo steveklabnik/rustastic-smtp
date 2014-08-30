@@ -1,9 +1,24 @@
 use std::string::{String};
 use super::{utils};
 
+/// Maximum length of the local part.
 static MAX_MAILBOX_LOCAL_PART_LEN: uint = 64;
+
+/// Maximum length of an email address.
+///
+/// The RFC doesn't actually specify 254 chars, but it does say that a reverse path starts with
+/// "<", ends with ">" and including those symbols has a maximum length of 256.
 static MAX_MAILBOX_LEN: uint = 254;
+
+/// Maximum length of a domain name.
 static MAX_DOMAIN_LEN: uint = 255;
+
+#[test]
+fn test_static_vars() {
+    assert_eq!(64, MAX_MAILBOX_LOCAL_PART_LEN);
+    assert_eq!(254, MAX_MAILBOX_LEN);
+    assert_eq!(255, MAX_DOMAIN_LEN);
+}
 
 /// Represents the foreign part of an email address, aka the host.
 #[deriving(PartialEq, Eq, Clone, Show)]
@@ -16,27 +31,34 @@ enum MailboxForeignPart {
 /// Represents the local part of an email address, aka the username.
 #[deriving(PartialEq, Eq, Clone, Show)]
 struct MailboxLocalPart {
-    // This is a version of the local part for use in the SMTP protocol. This is
-    // either a dot-string or a quoted-string, whatever is shortest as
-    // recommended in RFC 5321.
+    /// This is a version of the local part for use in the SMTP protocol.
+    ///
+    /// This is either a dot-string or a quoted-string, whatever is shortest as
+    /// recommended in RFC 5321.
     smtp_string: String,
-    // This is a version of the local part that is completely unescaped. It is
-    // human readable but not suitable for use in SMTP.
+    /// This is a version of the local part that is completely unescaped.
+    ///
+    /// It is human readable but not suitable for use in SMTP.
     human_string: String
 }
 
 impl MailboxLocalPart {
-    fn from_dot_string(s: &str) -> MailboxLocalPart {
+    /// Create a local part from a dot-string.
+    fn from_dot_string(dot_string: &str) -> MailboxLocalPart {
         MailboxLocalPart {
-            human_string: s.into_string(),
-            smtp_string: s.into_string()
+            human_string: dot_string.into_string(),
+            smtp_string: dot_string.into_string()
         }
     }
 
-    fn from_quoted_string(s: &str) -> MailboxLocalPart {
+    /// Create a local part from a quoted-string.
+    ///
+    /// Since a quoted-string can sometimes be simplified, this function tries to simplify it
+    /// as much as possible.
+    fn from_quoted_string(quoted_string: &str) -> MailboxLocalPart {
         MailboxLocalPart {
-            human_string: utils::unescape_quoted_string(s),
-            smtp_string: utils::simplify_quoted_string(s)
+            human_string: utils::unescape_quoted_string(quoted_string),
+            smtp_string: utils::simplify_quoted_string(quoted_string)
         }
     }
 }

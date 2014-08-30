@@ -18,6 +18,7 @@ If you are working on this or want on this, please open an issue so that other p
 * Documentation.
 * More tests.
 * Case insensitive command name matching.
+* Make MailboxLocalPart public and make constructors returns options rather than assuming arguments are valid.
 
 ## Things worth discussing but needed only later
 
