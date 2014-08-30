@@ -13,6 +13,8 @@ iterate on ideas together.
 ```rust
 extern crate rsmtp;
 
+use rsmtp::server;
+
 fn main() {
     let mut server = server::SmtpServer::new().unwrap();
     println!("Listening on port 2525...");
