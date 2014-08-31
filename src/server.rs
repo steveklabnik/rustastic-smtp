@@ -224,7 +224,7 @@ impl<S: Writer+Reader+Send, A: Acceptor<S>> SmtpServer<S, A> {
                     let line = stream.read_line().unwrap();
 
                     if local_config.debug {
-                        println!("rsmtp: imsg: {}", line);
+                        println!("rsmtp: imsg: '{}'", line);
                     }
 
                     // Check if the line is a valid command. If so, do what needs to be done.
@@ -303,7 +303,7 @@ fn handle_command_helo<S: Writer+Reader>(stream: &mut SmtpStream<S>,
         transaction.state = Helo;
         stream.write_line("250 OK").unwrap();
         if config.debug {
-            println!("rsmtp: omsg: 205 OK");
+            println!("rsmtp: omsg: 250 OK");
         }
         Ok(())
     }
@@ -340,7 +340,7 @@ fn handle_command_mail<S: Writer+Reader>(stream: &mut SmtpStream<S>,
                 transaction.state = Mail;
                 stream.write_line("250 OK").unwrap();
                 if config.debug {
-                    println!("rsmtp: omsg: 205 OK");
+                    println!("rsmtp: omsg: 250 OK");
                 }
             }
         }
@@ -385,7 +385,7 @@ fn handle_command_rcpt<S: Writer+Reader>(stream: &mut SmtpStream<S>,
                 transaction.state = Rcpt;
                 stream.write_line("250 OK").unwrap();
                 if config.debug {
-                    println!("rsmtp: omsg: 205 OK");
+                    println!("rsmtp: omsg: 250 OK");
                 }
             }
         }
@@ -419,7 +419,7 @@ fn handle_command_data<S: Writer+Reader>(stream: &mut SmtpStream<S>,
         transaction.reset();
         stream.write_line("250 OK").unwrap();
         if config.debug {
-            println!("rsmtp: omsg: 205 OK");
+            println!("rsmtp: omsg: 250 OK");
         }
     }
     Ok(())
@@ -444,7 +444,7 @@ fn handle_command_rset<S: Writer+Reader>(stream: &mut SmtpStream<S>,
         transaction.reset();
         stream.write_line("250 OK").unwrap();
         if config.debug {
-            println!("rsmtp: omsg: 205 OK");
+            println!("rsmtp: omsg: 250 OK");
         }
     }
     Ok(())
@@ -521,7 +521,7 @@ fn handle_command_noop<S: Writer+Reader>(stream: &mut SmtpStream<S>,
     if line.len() == 0 || line.char_at(0) == ' ' {
         stream.write_line("250 OK").unwrap();
         if config.debug {
-            println!("rsmtp: omsg: 205 OK");
+            println!("rsmtp: omsg: 250 OK");
         }
     } else {
         stream.write_line("500 Command unrecognized").unwrap();
