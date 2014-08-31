@@ -9,11 +9,17 @@
 //! ```no_run
 //! extern crate rsmtp;
 //!
-//! use rsmtp::server::{SmtpServer};
+//! use rsmtp::server::{SmtpServer, SmtpServerConfig};
 //!
 //! fn main() {
-//!     let mut server = SmtpServer::new().unwrap();
-//!     println!("Listening on port 2525...");
+//!     let config = SmtpServerConfig {
+//!         ip: "127.0.0.1",
+//!         domain: "rustastic.org",
+//!         port: 2525,
+//!         max_recipients: 100,
+//!         debug: true
+//!     };
+//!     let mut server = SmtpServer::new(config).unwrap();
 //!     server.run();
 //! }
 //! ```

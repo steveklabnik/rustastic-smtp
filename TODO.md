@@ -10,11 +10,11 @@ If you are working on this or want on this, please open an issue so that other p
 * Configuration:
     * Recipient email address handler.
     * Finished transaction handler (to save mail somewhere).
-    * Timeouts.
-    * Maximum number of recipients.
+    * Timeouts. See: https://github.com/rust-lang/rust/issues/15802.
     * Maximum email body size.
     * Error handler.
 * Allow empty reverse path, aka `<>`, in `MAIL` command.
+* Support `Postmaster` email address.
 * Remove calls to `unwrap` and actually handle errors.
 * Documentation.
 * More tests.
@@ -29,6 +29,7 @@ If you are working on this or want on this, please open an issue so that other p
 * Make commands optional via configuration.
 * Switching the utils to using `Option` instead of `return 0` to convey the absence of something.
 * Make safe (return `Option`) public versions of `MailboxLocalPart` functions.
+* Allow configuring via a configuration file to avoid recompilation.
 
 ## Other ideas
 

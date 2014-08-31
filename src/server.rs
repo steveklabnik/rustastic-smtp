@@ -17,7 +17,50 @@ type HandlerDescription<S> = (
 
 type HandlerFunction<S> = fn(&mut SmtpStream<S>,
                              &mut SmtpTransaction,
+                             &SmtpServerConfig,
                              &str) -> Result<(), ()>;
+
+#[allow(dead_code)]
+trait SmtpServerEventHandler {
+    #[allow(unused_variable)]
+    fn handle_mail(mailbox: &Mailbox) -> Result<(), ()> {
+        Ok(())
+    }
+
+    #[allow(unused_variable)]
+    fn handle_rcpt(mailbox: &Mailbox) -> Result<(), ()> {
+        Ok(())
+    }
+
+    #[allow(unused_variable)]
+    fn handle_transaction(transaction: &SmtpTransaction) -> Result<(), ()> {
+        Ok(())
+    }
+
+    #[allow(unused_variable)]
+    fn handle_error(err: &SmtpServerError) -> Result<(), ()> {
+        Ok(())
+    }
+}
+
+/// Represents the configuration of an SMTP server.
+pub struct SmtpServerConfig/*<E: SmtpServerEventHandler>*/ {
+    /// Maximum number of recipients per SMTP transaction.
+    pub max_recipients: uint,
+    /// Port on which to listen for incoming messages.
+    pub port: u16,
+    /// If `true`, debug messages will be printed to the console during transactions.
+    pub debug: bool,
+    /// The IP on which to `bind (2)` the `TcpListener`.
+    pub ip: &'static str,
+    /// The domain name used to identify the SMTP server.
+    pub domain: &'static str,
+    //pub timeout: uint, // at least 5 minutes
+    //pub max_clients: uint, // maximum clients to handle at any given time
+    //pub max_pending_clients: uint, // maximum clients to put on hold while handling other clients
+    //pub max_message_size: uint, // at least 2 ^ 16
+    //pub event_handler: E, // event handler
+}
 
 /// Represents an SMTP server which handles client transactions with any kind of stream.
 ///
@@ -25,7 +68,8 @@ type HandlerFunction<S> = fn(&mut SmtpStream<S>,
 /// should not be used for other purposes directly. Use `SmtpServer` instead.
 pub struct SmtpServer<S: 'static+Writer+Reader, A: Acceptor<S>> {
     // Underlying acceptor that allows accepting client connections to handle them.
-    acceptor: A
+    acceptor: A,
+    config: Arc<SmtpServerConfig>
 }
 
 /// Represents an error during creation of an SMTP server.
@@ -111,18 +155,25 @@ fn test_smtp_transaction_reset() {
 
 impl SmtpServer<TcpStream, TcpAcceptor> {
     /// Creates a new SMTP server that listens on `0.0.0.0:2525`.
-    pub fn new() -> Result<SmtpServer<TcpStream, TcpAcceptor>, SmtpServerError> {
-        let listener = TcpListener::bind("0.0.0.0", 2525).unwrap();
+    pub fn new(config: SmtpServerConfig) -> Result<SmtpServer<TcpStream, TcpAcceptor>, SmtpServerError> {
+        let listener = TcpListener::bind(config.ip, config.port).unwrap();
+        if config.debug {
+            println!("rsmtp: info: binding on ip {}", config.ip);
+        }
         let acceptor = listener.listen().unwrap();
-        SmtpServer::new_from_acceptor(acceptor)
+        if config.debug {
+            println!("rsmtp: info: listening on port {}", config.port);
+        }
+        SmtpServer::new_from_acceptor(acceptor, config)
     }
 }
 
 impl<S: Writer+Reader+Send, A: Acceptor<S>> SmtpServer<S, A> {
     /// Creates a new SMTP server from an `Acceptor` implementor. Useful for testing.
-    pub fn new_from_acceptor(acceptor: A) -> Result<SmtpServer<S, A>, SmtpServerError> {
+    pub fn new_from_acceptor(acceptor: A, config: SmtpServerConfig) -> Result<SmtpServer<S, A>, SmtpServerError> {
         Ok(SmtpServer {
-            acceptor: acceptor
+            acceptor: acceptor,
+            config: Arc::new(config)
         })
     }
 
@@ -149,13 +200,21 @@ impl<S: Writer+Reader+Send, A: Acceptor<S>> SmtpServer<S, A> {
         let handlers = Arc::new(self.handlers());
         for mut stream_res in self.acceptor.incoming() {
             let local_handlers = handlers.clone();
+            let local_config = self.config.clone();
             spawn(proc() {
                 // TODO: is there a better way to handle an error here?
                 let mut stream = SmtpStream::new(stream_res.unwrap());
+                // WAIT FOR: https://github.com/rust-lang/rust/issues/15802
+                //stream.stream.set_deadline(local_config.timeout);
                 let mut transaction = SmtpTransaction::new();
 
                 // Send the opening welcome message.
-                stream.write_line("220 rustastic.org").unwrap();
+                stream.write_line(format!("220 {}", local_config.domain).as_slice()).unwrap();
+
+                // Debug arrival of this client.
+                if local_config.debug {
+                    println!("rsmtp: omsg: 220 {}", local_config.domain);
+                }
 
                 // Forever, looooop over command lines and handle them.
                 'main_loop: loop {
@@ -163,7 +222,13 @@ impl<S: Writer+Reader+Send, A: Acceptor<S>> SmtpServer<S, A> {
                     // TODO: check the return value and return appropriate error message,
                     // ie "500 Command line too long".
                     let line = stream.read_line().unwrap();
-                    for h in local_handlers.iter() {
+
+                    if local_config.debug {
+                        println!("rsmtp: imsg: {}", line);
+                    }
+
+                    // Check if the line is a valid command. If so, do what needs to be done.
+                    for h in local_handlers.deref().iter() {
                         let line_start = line.as_slice().slice_to(h.ref0().len())
                             .into_string().into_ascii_upper();
                         // Check that the begining of the command matches an existing SMTP
@@ -174,18 +239,28 @@ impl<S: Writer+Reader+Send, A: Acceptor<S>> SmtpServer<S, A> {
                                 (*h.ref2())(
                                     &mut stream,
                                     &mut transaction,
+                                    local_config.deref(),
                                     line.as_slice().slice_from((*h.ref0()).len())
                                 ).unwrap(); // TODO: avoid unwrap here.
                                 continue 'main_loop;
                             } else {
                                 // Bad sequence of commands.
                                 stream.write_line("503 Bad sequence of commands").unwrap();
+
+                                if local_config.debug {
+                                    println!("rsmtp: omsg: 503 Bad sequence of commands");
+                                }
+
                                 continue 'main_loop;
                             }
                         }
                     }
                     // No valid command was given.
                     stream.write_line("500 Command unrecognized").unwrap();
+
+                    if local_config.debug {
+                        println!("rsmtp: omsg: 500 Command unrecognized");
+                    }
                 }
             });
         }
@@ -212,16 +287,24 @@ fn test_smtp_server_run() {
     // fail!();
 }
 
+#[allow(unused_variable)]
 fn handle_command_helo<S: Writer+Reader>(stream: &mut SmtpStream<S>,
                        transaction: &mut SmtpTransaction,
+                       config: &SmtpServerConfig,
                        line: &str) -> Result<(), ()> {
     if line.len() == 0 || utils::get_domain_len(line) != line.len() {
         stream.write_line("501 Domain name is invalid").unwrap();
+        if config.debug {
+            println!("rsmtp: omsg: 501 Domain name is invalid");
+        }
         Ok(())
     } else {
         transaction.domain = Some(line.into_string());
         transaction.state = Helo;
         stream.write_line("250 OK").unwrap();
+        if config.debug {
+            println!("rsmtp: omsg: 205 OK");
+        }
         Ok(())
     }
 }
@@ -231,11 +314,16 @@ fn test_command_helo() {
     // fail!();
 }
 
+#[allow(unused_variable)]
 fn handle_command_mail<S: Writer+Reader>(stream: &mut SmtpStream<S>,
                        transaction: &mut SmtpTransaction,
+                       config: &SmtpServerConfig,
                        line: &str) -> Result<(), ()> {
     if line.char_at(0) != '<' || line.char_at(line.len() - 1) != '>' {
         stream.write_line("501 Email address invalid, must start with < and end with >").unwrap();
+        if config.debug {
+            println!("rsmtp: omsg: 501 Email address invalid, must start with < and end with >");
+        }
         Ok(())
     } else {
         let mailbox_res = Mailbox::parse(line.slice(1, line.len() - 1));
@@ -243,11 +331,17 @@ fn handle_command_mail<S: Writer+Reader>(stream: &mut SmtpStream<S>,
             Err(err) => {
                 stream.write_line(format!("501 Email address invalid: {}", err).as_slice())
                     .unwrap();
+                if config.debug {
+                    println!("rsmtp: omsg: 501 Email address invalid: {}", err);
+                }
             },
             Ok(mailbox) => {
                 transaction.from = Some(mailbox);
                 transaction.state = Mail;
                 stream.write_line("250 OK").unwrap();
+                if config.debug {
+                    println!("rsmtp: omsg: 205 OK");
+                }
             }
         }
         Ok(())
@@ -259,14 +353,22 @@ fn test_command_mail() {
     // fail!();
 }
 
+#[allow(unused_variable)]
 fn handle_command_rcpt<S: Writer+Reader>(stream: &mut SmtpStream<S>,
                        transaction: &mut SmtpTransaction,
+                       config: &SmtpServerConfig,
                        line: &str) -> Result<(), ()> {
-    if transaction.to.len() >= 100 {
+    if transaction.to.len() >= config.max_recipients {
         stream.write_line("452 Too many recipients").unwrap();
+        if config.debug {
+            println!("rsmtp: omsg: 452 Too many recipients");
+        }
         Ok(())
     } else if line.char_at(0) != '<' || line.char_at(line.len() - 1) != '>' {
         stream.write_line("501 Email address invalid, must start with < and end with >").unwrap();
+        if config.debug {
+            println!("rsmtp: omsg: 501 Email address invalid, must start with < and end with >");
+        }
         Ok(())
     } else {
         let mailbox_res = Mailbox::parse(line.slice(1, line.len() - 1));
@@ -274,11 +376,17 @@ fn handle_command_rcpt<S: Writer+Reader>(stream: &mut SmtpStream<S>,
             Err(err) => {
                 stream.write_line(format!("501 Email address invalid: {}", err).as_slice())
                     .unwrap();
+                if config.debug {
+                    println!("rsmtp: omsg: 501 Email address invalid: {}", err);
+                }
             },
             Ok(mailbox) => {
                 transaction.to.push(mailbox);
                 transaction.state = Rcpt;
                 stream.write_line("250 OK").unwrap();
+                if config.debug {
+                    println!("rsmtp: omsg: 205 OK");
+                }
             }
         }
         Ok(())
@@ -290,18 +398,29 @@ fn test_command_rcpt() {
     // fail!();
 }
 
+#[allow(unused_variable)]
 fn handle_command_data<S: Writer+Reader>(stream: &mut SmtpStream<S>,
                        transaction: &mut SmtpTransaction,
+                       config: &SmtpServerConfig,
                        line: &str) -> Result<(), ()> {
     if line.len() != 0 {
         stream.write_line("501 No arguments allowed").unwrap();
+        if config.debug {
+            println!("rsmtp: omsg: 501 No arguments allowed");
+        }
     } else {
         stream.write_line("354 Start mail input; end with <CRLF>.<CRLF>").unwrap();
+        if config.debug {
+            println!("rsmtp: omsg: 354 Start mail input; end with <CRLF>.<CRLF>");
+        }
         transaction.data = Some(stream.read_data().unwrap());
         transaction.state = Data;
         // ... (here is where we'd handle the finished transaction)
         transaction.reset();
         stream.write_line("250 OK").unwrap();
+        if config.debug {
+            println!("rsmtp: omsg: 205 OK");
+        }
     }
     Ok(())
 }
@@ -311,14 +430,22 @@ fn test_command_data() {
     // fail!();
 }
 
+#[allow(unused_variable)]
 fn handle_command_rset<S: Writer+Reader>(stream: &mut SmtpStream<S>,
                        transaction: &mut SmtpTransaction,
+                       config: &SmtpServerConfig,
                        line: &str) -> Result<(), ()> {
     if line.len() != 0 {
         stream.write_line("501 No arguments allowed").unwrap();
+        if config.debug {
+            println!("rsmtp: omsg: 501 No arguments allowed");
+        }
     } else {
         transaction.reset();
         stream.write_line("250 OK").unwrap();
+        if config.debug {
+            println!("rsmtp: omsg: 205 OK");
+        }
     }
     Ok(())
 }
@@ -331,8 +458,12 @@ fn test_command_rset() {
 #[allow(unused_variable)]
 fn handle_command_vrfy<S: Writer+Reader>(stream: &mut SmtpStream<S>,
                        transaction: &mut SmtpTransaction,
+                       config: &SmtpServerConfig,
                        line: &str) -> Result<(), ()> {
     stream.write_line("252 Cannot VRFY user").unwrap();
+    if config.debug {
+        println!("rsmtp: omsg: 252 Cannot VRFY user");
+    }
     Ok(())
 }
 
@@ -344,8 +475,12 @@ fn test_command_vrfy() {
 #[allow(unused_variable)]
 fn handle_command_expn<S: Writer+Reader>(stream: &mut SmtpStream<S>,
                        transaction: &mut SmtpTransaction,
+                       config: &SmtpServerConfig,
                        line: &str) -> Result<(), ()> {
     stream.write_line("252 Cannot EXPN mailing list").unwrap();
+    if config.debug {
+        println!("rsmtp: omsg: 252 Cannot EXPN mailing list");
+    }
     Ok(())
 }
 
@@ -357,11 +492,18 @@ fn test_command_expn() {
 #[allow(unused_variable)]
 fn handle_command_help<S: Writer+Reader>(stream: &mut SmtpStream<S>,
                        transaction: &mut SmtpTransaction,
+                       config: &SmtpServerConfig,
                        line: &str) -> Result<(), ()> {
     if line.len() == 0 || line.char_at(0) == ' ' {
         stream.write_line("502 Command not implemented").unwrap();
+        if config.debug {
+            println!("rsmtp: omsg: 502 Command not implemented");
+        }
     } else {
         stream.write_line("500 Command unrecognized").unwrap();
+        if config.debug {
+            println!("rsmtp: omsg: 500 Command unrecognized");
+        }
     }
     Ok(())
 }
@@ -374,11 +516,18 @@ fn test_command_help() {
 #[allow(unused_variable)]
 fn handle_command_noop<S: Writer+Reader>(stream: &mut SmtpStream<S>,
                        transaction: &mut SmtpTransaction,
+                       config: &SmtpServerConfig,
                        line: &str) -> Result<(), ()> {
     if line.len() == 0 || line.char_at(0) == ' ' {
         stream.write_line("250 OK").unwrap();
+        if config.debug {
+            println!("rsmtp: omsg: 205 OK");
+        }
     } else {
         stream.write_line("500 Command unrecognized").unwrap();
+        if config.debug {
+            println!("rsmtp: omsg: 500 Command unrecognized");
+        }
     }
     Ok(())
 }
@@ -391,8 +540,12 @@ fn test_command_noop() {
 #[allow(unused_variable)]
 fn handle_command_quit<S: Writer+Reader>(stream: &mut SmtpStream<S>,
                        transaction: &mut SmtpTransaction,
+                       config: &SmtpServerConfig,
                        line: &str) -> Result<(), ()> {
-    stream.write_line("221 rustastic.org").unwrap();
+    stream.write_line(format!("221 {}", config.domain).as_slice()).unwrap();
+    if config.debug {
+        println!("rsmtp: omsg: 221 {}", config.domain);
+    }
     Err(())
 }
 
