@@ -181,7 +181,7 @@ impl<S: Writer+Reader+Send, A: Acceptor<S>> SmtpServer<S, A> {
         let all = &[Init, Helo, Mail, Rcpt, Data];
         let mut handlers: Vec<HandlerDescription<S>> = Vec::new();
         handlers.push(("HELO ".into_string(),[Init].into_vec(), handle_command_helo));
-        handlers.push(("EHLO".into_string(), [Init].into_vec(), handle_command_helo));
+        handlers.push(("EHLO ".into_string(), [Init].into_vec(), handle_command_helo));
         handlers.push(("MAIL FROM:".into_string(), [Helo].into_vec(), handle_command_mail));
         handlers.push(("RCPT TO:".into_string(), [Mail, Rcpt].into_vec(), handle_command_rcpt));
         handlers.push(("DATA".into_string(), [Rcpt].into_vec(), handle_command_data));
@@ -229,28 +229,33 @@ impl<S: Writer+Reader+Send, A: Acceptor<S>> SmtpServer<S, A> {
 
                     // Check if the line is a valid command. If so, do what needs to be done.
                     for h in local_handlers.deref().iter() {
+                        // Don't check lines shorter than required. This also avoids getting an
+                        // out of bounds error below.
+                        if line.len() < h.ref0().len() {
+                            continue;
+                        }
                         let line_start = line.as_slice().slice_to(h.ref0().len())
                             .into_string().into_ascii_upper();
                         // Check that the begining of the command matches an existing SMTP
                         // command. This could be something like "HELO " or "RCPT TO:".
                         if line_start.as_slice().starts_with(h.ref0().as_slice()) {
                             if h.ref1().contains(&transaction.state) {
+                                let rest = line.as_slice().slice_from((*h.ref0()).len());
                                 // We're good to go!
                                 (*h.ref2())(
                                     &mut stream,
                                     &mut transaction,
                                     local_config.deref(),
-                                    line.as_slice().slice_from((*h.ref0()).len())
+                                    rest
                                 ).unwrap(); // TODO: avoid unwrap here.
                                 continue 'main_loop;
                             } else {
                                 // Bad sequence of commands.
                                 stream.write_line("503 Bad sequence of commands").unwrap();
-
+                                // Debug to console.
                                 if local_config.debug {
                                     println!("rsmtp: omsg: 503 Bad sequence of commands");
                                 }
-
                                 continue 'main_loop;
                             }
                         }
@@ -292,7 +297,13 @@ fn handle_command_helo<S: Writer+Reader>(stream: &mut SmtpStream<S>,
                        transaction: &mut SmtpTransaction,
                        config: &SmtpServerConfig,
                        line: &str) -> Result<(), ()> {
-    if line.len() == 0 || utils::get_domain_len(line) != line.len() {
+    if line.len() == 0 {
+        stream.write_line("501 Domain name not provided").unwrap();
+        if config.debug {
+            println!("rsmtp: omsg: 501 Domain name is invalid");
+        }
+        Ok(())
+    } else if utils::get_domain_len(line) != line.len() {
         stream.write_line("501 Domain name is invalid").unwrap();
         if config.debug {
             println!("rsmtp: omsg: 501 Domain name is invalid");
