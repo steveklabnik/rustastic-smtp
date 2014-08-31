@@ -9,21 +9,20 @@
 //! ```no_run
 //! extern crate rsmtp;
 //!
-//! use rsmtp::server::{SmtpServer, SmtpServerConfig, SmtpServerEventHandler, SmtpTransaction};
+//! use rsmtp::server::{
+//!     SmtpServer,
+//!     SmtpServerConfig,
+//!     SmtpServerEventHandler,
+//!     SmtpTransaction
+//! };
 //!
 //! #[deriving(Clone)]
 //! struct Handler;
 //!
-//! impl Handler {
-//!     fn save(&mut self, data: &SmtpTransaction) -> Result<(), ()> {
-//!         // save to a database, send to an API, whatever you want :-)
-//!         Ok(())
-//!     }
-//! }
-//!
 //! impl SmtpServerEventHandler for Handler {
 //!     fn handle_transaction(&mut self, transaction: &SmtpTransaction) -> Result<(), ()> {
-//!         self.save(transaction)
+//!         println!("Save to a database, send to an API, whatever you want :-)");
+//!         Ok(())
 //!     }
 //! }
 //!
