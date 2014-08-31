@@ -28,7 +28,7 @@
 //!
 //! fn main() {
 //!     let config = SmtpServerConfig {
-//!         ip: "127.0.0.1",
+//!         ip: "0.0.0.0",
 //!         domain: "rustastic.org",
 //!         port: 2525,
 //!         max_recipients: 100,
