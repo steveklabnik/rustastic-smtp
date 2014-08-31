@@ -8,14 +8,12 @@ If you are working on this or want on this, please open an issue so that other p
 ## Things that are needed now
 
 * Configuration:
-    * Recipient email address handler.
-    * Finished transaction handler (to save mail somewhere).
     * Timeouts. See: https://github.com/rust-lang/rust/issues/15802.
     * Maximum email body size.
-    * Error handler.
+* Switch body to using `u8` instead of `String.`
+* Use error handler instead of `unwrap`.
 * Allow empty reverse path, aka `<>`, in `MAIL` command.
 * Support `Postmaster` email address.
-* Remove calls to `unwrap` and actually handle errors.
 * Documentation.
 * More tests.
 
@@ -30,6 +28,8 @@ If you are working on this or want on this, please open an issue so that other p
 * Switching the utils to using `Option` instead of `return 0` to convey the absence of something.
 * Make safe (return `Option`) public versions of `MailboxLocalPart` functions.
 * Allow configuring via a configuration file to avoid recompilation.
+* Remove calls to `Mailbox::parse(mailbox)` in server where it is possible to have something like
+`Mailbox::new()` to improve performance.
 
 ## Other ideas
 

@@ -6,33 +6,30 @@ use super::{utils};
 use std::sync::{Arc};
 use std::ascii::{OwnedAsciiExt};
 
-trait SmtpServerEventHandler {
-    fn handle_mail(mailbox: &Mailbox) -> Result<(), ()> {
+/// Hooks into different places of the SMTP server to allow its customization.
+pub trait SmtpServerEventHandler {
+    /// Called after getting the sender mailbox. If `Err(())` is returned, a 550 response is sent.
+    #[allow(unused_variable)]
+    fn handle_mail(&mut self, mailbox: &Mailbox) -> Result<(), ()> {
         Ok(())
     }
 
-    fn handle_rcpt(mailbox: &Mailbox) -> Result<(), ()> {
+    /// Called after getting a recipient mailbox. If `Err(())` is returned, a 550 response is sent.
+    #[allow(unused_variable)]
+    fn handle_rcpt(&mut self, mailbox: &Mailbox) -> Result<(), ()> {
         Ok(())
     }
 
-    fn handle_transaction(transaction: &SmtpTransaction) -> Result<(), ()> {
+    #[allow(unused_variable)]
+    fn handle_transaction(&mut self, transaction: &SmtpTransaction) -> Result<(), ()> {
         Ok(())
     }
 
-    fn handle_error(err: &SmtpServerError) -> Result<(), ()> {
+    #[allow(unused_variable)]
+    fn handle_error(&mut self, err: &SmtpServerError) -> Result<(), ()> {
         Ok(())
     }
 }
-
-type HandlerDescription<S, E: SmtpServerEventHandler> = (
-    // The prefix in the command sent by the client.
-    String,
-    // The list of allowed states for this command.
-    Vec<SmtpTransactionState>,
-    // The handler function to call for this command.
-    fn(&mut SmtpStream<S>, &mut SmtpTransaction,
-       &SmtpServerConfig, &mut E, &str) -> Result<(), ()>
-);
 
 /// Represents the configuration of an SMTP server.
 pub struct SmtpServerConfig {
@@ -98,13 +95,13 @@ fn test_smtp_transaction_state() {
 /// Represents an SMTP transaction.
 pub struct SmtpTransaction {
     /// Domain name passed via `HELO`/`EHLO`.
-    pub domain: Option<String>,
+    pub domain: String,
     /// A vector of recipients' email addresses.
     pub to: Vec<Mailbox>,
     /// The email address of the sender.
-    pub from: Option<Mailbox>,
+    pub from: Mailbox,
     /// The body of the email.
-    pub data: Option<String>,
+    pub data: String,
     /// The current state of the transaction.
     pub state: SmtpTransactionState
 }
@@ -113,10 +110,12 @@ impl SmtpTransaction {
     /// Creates a new transaction.
     pub fn new() -> SmtpTransaction {
         SmtpTransaction {
-            domain: None,
+            domain: String::new(),
             to: Vec::new(),
-            from: None,
-            data: None,
+            // Put a default email address. This will never be accessed unless replaced. Also,
+            // since "r@r" is valid, we can `unwrap()` safely.
+            from: Mailbox::parse("r@r").unwrap(),
+            data: String::new(),
             state: Init
         }
     }
@@ -125,9 +124,9 @@ impl SmtpTransaction {
     ///
     /// This is used when a transaction ends and when `RSET` is sent by the client.
     pub fn reset(&mut self) {
-        self.to.clear();
-        self.from = None;
-        self.data = None;
+        self.to = Vec::new();
+        self.from = Mailbox::parse("r@r").unwrap();
+        self.data = String::new();
         if self.state != Init {
             self.state = Helo;
         }
@@ -169,20 +168,29 @@ impl<S: Writer+Reader+Send, A: Acceptor<S>, E: SmtpServerEventHandler+Clone+Send
         })
     }
 
-    fn handlers<S: Writer+Reader, E: SmtpServerEventHandler>(&self) -> Vec<HandlerDescription<S, E>> {
+    fn handlers<S: Writer+Reader, E: SmtpServerEventHandler>(&self) -> Vec<(
+        // The prefix in the command sent by the client.
+        String,
+        // The list of allowed states for this command.
+        Vec<SmtpTransactionState>,
+        // The handler function to call for this command.
+        fn(&mut SmtpStream<S>, &mut SmtpTransaction,
+           &SmtpServerConfig, &mut E, &str) -> Result<(), ()>
+    )> {
         let all = &[Init, Helo, Mail, Rcpt, Data];
-        let mut handlers: Vec<HandlerDescription<S, E>> = Vec::new();
-        handlers.push(("HELO ".into_string(),[Init].into_vec(), handle_command_helo));
-        handlers.push(("EHLO ".into_string(), [Init].into_vec(), handle_command_helo));
-        handlers.push(("MAIL FROM:".into_string(), [Helo].into_vec(), handle_command_mail));
-        handlers.push(("RCPT TO:".into_string(), [Mail, Rcpt].into_vec(), handle_command_rcpt));
-        handlers.push(("DATA".into_string(), [Rcpt].into_vec(), handle_command_data));
-        handlers.push(("RSET".into_string(), all.into_vec(), handle_command_rset));
-        handlers.push(("VRFY ".into_string(), all.into_vec(), handle_command_vrfy));
-        handlers.push(("EXPN ".into_string(), all.into_vec(), handle_command_expn));
-        handlers.push(("HELP".into_string(), all.into_vec(), handle_command_help));
-        handlers.push(("NOOP".into_string(), all.into_vec(), handle_command_noop));
-        handlers.push(("QUIT".into_string(), all.into_vec(), handle_command_quit));
+        let handlers = vec!(
+            ("HELO ".into_string(),[Init].into_vec(), handle_command_helo),
+            ("EHLO ".into_string(), [Init].into_vec(), handle_command_helo),
+            ("MAIL FROM:".into_string(), [Helo].into_vec(), handle_command_mail),
+            ("RCPT TO:".into_string(), [Mail, Rcpt].into_vec(), handle_command_rcpt),
+            ("DATA".into_string(), [Rcpt].into_vec(), handle_command_data),
+            ("RSET".into_string(), all.into_vec(), handle_command_rset),
+            ("VRFY ".into_string(), all.into_vec(), handle_command_vrfy),
+            ("EXPN ".into_string(), all.into_vec(), handle_command_expn),
+            ("HELP".into_string(), all.into_vec(), handle_command_help),
+            ("NOOP".into_string(), all.into_vec(), handle_command_noop),
+            ("QUIT".into_string(), all.into_vec(), handle_command_quit)
+        );
         handlers
     }
 
@@ -305,7 +313,7 @@ fn handle_command_helo<S: Writer+Reader, E: SmtpServerEventHandler>(stream: &mut
         }
         Ok(())
     } else {
-        transaction.domain = Some(line.into_string());
+        transaction.domain = line.into_string();
         transaction.state = Helo;
         stream.write_line("250 OK").unwrap();
         if config.debug {
@@ -343,12 +351,21 @@ fn handle_command_mail<S: Writer+Reader, E: SmtpServerEventHandler>(stream: &mut
                 }
             },
             Ok(mailbox) => {
-                // 550 if no mailbox...
-                transaction.from = Some(mailbox);
-                transaction.state = Mail;
-                stream.write_line("250 OK").unwrap();
-                if config.debug {
-                    println!("rsmtp: omsg: 250 OK");
+                match event_handler.handle_mail(&mailbox) {
+                    Ok(_) => {
+                        transaction.from = mailbox;
+                        transaction.state = Mail;
+                        stream.write_line("250 OK").unwrap();
+                        if config.debug {
+                            println!("rsmtp: omsg: 250 OK");
+                        }
+                    },
+                    Err(_) => {
+                        stream.write_line("550 Mailbox not taken").unwrap();
+                        if config.debug {
+                            println!("rsmtp: omsg: 550 Mailbox not taken");
+                        }
+                    }
                 }
             }
         }
@@ -433,13 +450,23 @@ fn handle_command_data<S: Writer+Reader, E: SmtpServerEventHandler>(stream: &mut
         if config.debug {
             println!("rsmtp: omsg: 354 Start mail input; end with <CRLF>.<CRLF>");
         }
-        transaction.data = Some(stream.read_data().unwrap());
+        transaction.data = stream.read_data().unwrap();
         transaction.state = Data;
-        // ... (here is where we'd handle the finished transaction)
-        transaction.reset();
-        stream.write_line("250 OK").unwrap();
-        if config.debug {
-            println!("rsmtp: omsg: 250 OK");
+        // Send an immutable reference of the transaction.
+        match event_handler.handle_transaction(&*transaction) {
+            Ok(_) => {
+                transaction.reset();
+                stream.write_line("250 OK").unwrap();
+                if config.debug {
+                    println!("rsmtp: omsg: 250 OK");
+                }
+            },
+            Err(_) => {
+                stream.write_line("554 Transaction failed").unwrap();
+                if config.debug {
+                    println!("rsmtp: omsg: 554 Transaction failed");
+                }
+            }
         }
     }
     Ok(())
