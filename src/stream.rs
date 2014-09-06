@@ -75,19 +75,30 @@ impl<R: Reader> SmtpStream<R> {
         let mut data: Vec<u8> = Vec::with_capacity(512);
         let end = [13u8, 10u8, 46u8, 13u8, 10u8]; // CRLF.CRLF
         let end_len = end.len();
+        let mut too_long = false;
+        let mut last_5: Vec<u8> = vec!(0u8, 0u8, 0u8, 0u8, 0u8);
 
         loop {
             // If we have previously read as much data as possible and still are not finished
             // reading, stop here.
-            if data.len() >= self.max_message_size {
-                return Err(TooMuchData)
+            if data.len() >= self.max_message_size && !too_long {
+                too_long = true;
             }
 
             // Try to get more data and see if we have got it all.
             let byte_res = self.stream.read_byte();
             match byte_res {
                 Ok(b) => {
-                    data.push(b);
+                    // Only keep remaining data if we are allowed too. Otherwise, discard it too
+                    // avoid out of memory errors.
+                    if data.len() < self.max_message_size {
+                        data.push(b);
+                    }
+                    // Since we always have 5 bytes in here, this should never fail.
+                    last_5.remove(0).unwrap();
+                    last_5.push(b);
+
+                    // Let's see if we have read all the data.
                     let data_len = data.len();
                     if data_len >= end_len && data.slice_from(data_len - end_len) == end {
                         data.truncate(data_len - end_len);
@@ -99,7 +110,11 @@ impl<R: Reader> SmtpStream<R> {
                 }
             }
         }
-        Ok(data)
+        if too_long {
+            Err(TooMuchData)
+        } else {
+            Ok(data)
+        }
     }
 
     /// Read one line of input.
@@ -107,18 +122,30 @@ impl<R: Reader> SmtpStream<R> {
         let mut data: Vec<u8> = Vec::with_capacity(MAX_LINE_SIZE);
         let end = [13u8, 10u8]; // CRLF
         let end_len = end.len();
+        let mut too_long = false;
+        let mut last_2: Vec<u8> = vec!(0u8, 0u8);
+
         loop {
-            // If we have previously read 512 bytes and have not found a line,
-            // stop here.
-            if data.len() >= 512 {
-                return Err(LineTooLong)
+            // If we have previously read as much data as possible and still are not finished
+            // reading, stop here.
+            if data.len() >= MAX_LINE_SIZE && !too_long {
+                too_long = true;
             }
 
-            // Try to read one more byte and see if a line is formed.
+            // Try to get more data and see if we have got it all.
             let byte_res = self.stream.read_byte();
             match byte_res {
                 Ok(b) => {
-                    data.push(b);
+                    // Only keep remaining data if we are allowed too. Otherwise, discard it too
+                    // avoid out of memory errors.
+                    if data.len() < self.max_message_size {
+                        data.push(b);
+                    }
+                    // Since we always have 2 bytes in here, this should never fail.
+                    last_2.remove(0).unwrap();
+                    last_2.push(b);
+
+                    // Let's see if we have read all the line
                     let data_len = data.len();
                     if data_len >= end_len && data.slice_from(data_len - end_len) == end {
                         data.truncate(data_len - end_len);
@@ -128,7 +155,11 @@ impl<R: Reader> SmtpStream<R> {
                 Err(err) => return Err(ReadFailed(err))
             }
         }
-        Ok(data)
+        if too_long {
+            Err(LineTooLong)
+        } else {
+            Ok(data)
+        }
     }
 
 }

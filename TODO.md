@@ -9,6 +9,7 @@ If you are working on this or want on this, please open an issue so that other p
 
 * Support for timeout configuration. See: https://github.com/rust-lang/rust/issues/15802.
 * Log errors instead of just calling `unwrap`. Log file? `write` thread safe?
+* Add config checks to force limits to be spec compliant.
 * Documentation.
 * Tests
 	* `SmtpStream` errors.
@@ -25,8 +26,6 @@ If you are working on this or want on this, please open an issue so that other p
 * Switching the utils to using `Option` instead of `return 0` to convey the absence of something.
 * Make safe (return `Option`) public versions of `MailboxLocalPart` functions.
 * Allow configuring via a configuration file to avoid recompilation.
-* Remove calls to `Mailbox::parse(mailbox)` in server where it is possible to have something like
-`Mailbox::new()` to improve performance.
 
 ## Other ideas
 
