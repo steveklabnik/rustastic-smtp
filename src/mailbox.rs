@@ -16,6 +16,7 @@ use std::string::{String};
 use super::{utils};
 use std::io::net::{ip};
 use std::from_str::{FromStr};
+use std::ascii::{OwnedAsciiExt};
 
 /// Maximum length of the local part.
 static MAX_MAILBOX_LOCAL_PART_LEN: uint = 64;
@@ -253,6 +254,11 @@ impl Mailbox {
         } else if offset > MAX_MAILBOX_LEN {
             Err(TooLong)
         } else {
+            if local_part.human_string.is_ascii() {
+                if local_part.human_string.clone().into_ascii_lower().as_slice() == "postmaster" {
+                    local_part = MailboxLocalPart::from_dot_string("postmaster");
+                }
+            }
             Ok(Mailbox {
                 local_part: local_part,
                 foreign_part: foreign_part
@@ -269,6 +275,8 @@ fn test_mailbox() {
     let path_4 = Mailbox::parse("rust.is@[127.0.0.1]").unwrap();
     let path_5 = Mailbox::parse("rust.is@[Ipv6:::1]").unwrap();
     let path_6 = Mailbox::parse("rust.is@[Ipv6:2001:db8::ff00:42:8329]").unwrap();
+    let path_7 = Mailbox::parse("PosTMAster@ok").unwrap();
+    let path_8 = Mailbox::parse("postmaster@ok").unwrap();
 
     assert!(path_1 == path_1.clone());
     assert!(path_2 == path_2.clone());
@@ -316,6 +324,9 @@ fn test_mailbox() {
     assert_eq!(path_6.foreign_part, IpAddr(
         ip::Ipv6Addr(0x2001, 0xdb8, 0x0, 0x0, 0x0, 0xff00, 0x42, 0x8329)
     ));
+
+    assert_eq!("postmaster", path_7.local_part.human_string.as_slice());
+    assert_eq!("postmaster", path_8.local_part.human_string.as_slice());
 
     assert_eq!(Err(ForeignPartUnrecognized), Mailbox::parse("rust.is@[127.0.0.1"));
     assert_eq!(Err(ForeignPartUnrecognized), Mailbox::parse("rust.is@[00.0.1]"));

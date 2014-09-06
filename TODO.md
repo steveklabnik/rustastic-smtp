@@ -12,7 +12,6 @@ If you are working on this or want on this, please open an issue so that other p
     * Maximum email body size.
 * Use error handler instead of `unwrap`.
 * Allow empty reverse path, aka `<>`, in `MAIL` command.
-* Support `Postmaster` email address.
 * Documentation.
 * More tests.
 
