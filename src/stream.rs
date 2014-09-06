@@ -15,7 +15,7 @@
 use std::io::{Reader, Writer, IoError};
 use std::vec::{Vec};
 #[allow(unused_imports)]
-use std::io::{Truncate, Append, Open, Read, Write};
+use std::io::{Truncate, Open, Read, Write};
 #[allow(unused_imports)]
 use std::io::fs::{File};
 
