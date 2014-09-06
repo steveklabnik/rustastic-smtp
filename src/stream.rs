@@ -15,7 +15,7 @@
 use std::io::{Reader, Writer, IoError};
 use std::vec::{Vec};
 #[allow(unused_imports)]
-use std::io::{Truncate, Open, Read, Write};
+use std::io::{Truncate, Append, Open, Read, Write};
 #[allow(unused_imports)]
 use std::io::fs::{File};
 
@@ -59,6 +59,12 @@ pub enum SmtpStreamError {
     TooMuchData
 }
 
+#[deriving(Show, Eq, PartialEq)]
+enum SmtpStreamPrivateError {
+    PrivateReadFailed(IoError),
+    TooLong
+}
+
 impl<S> SmtpStream<S> {
     /// Create a new `SmtpStream` from another stream.
     pub fn new(inner: S, max_message_size: uint) -> SmtpStream<S> {
@@ -70,17 +76,15 @@ impl<S> SmtpStream<S> {
 }
 
 impl<R: Reader> SmtpStream<R> {
-    /// Read the data section of an email. Ends with "&lt;CRLF&gt;.&lt;CRLF&gt;".
-    pub fn read_data(&mut self) -> Result<Vec<u8>, SmtpStreamError> {
+    fn read_until(&mut self, end: &[u8], limit: uint) -> Result<Vec<u8>, SmtpStreamPrivateError> {
         let mut data: Vec<u8> = Vec::with_capacity(512);
-        let end = [13u8, 10u8, 46u8, 13u8, 10u8]; // CRLF.CRLF
+        let mut last: Vec<u8> = Vec::with_capacity(end.len());
         let mut too_long = false;
-        let mut last_5: Vec<u8> = vec!(0u8, 0u8, 0u8, 0u8, 0u8);
 
         loop {
             // If we have previously read as much data as possible and still are not finished
             // reading, stop here.
-            if data.len() >= self.max_message_size && !too_long {
+            if data.len() >= limit && !too_long {
                 too_long = true;
             }
 
@@ -90,15 +94,19 @@ impl<R: Reader> SmtpStream<R> {
                 Ok(b) => {
                     // Only keep remaining data if we are allowed too. Otherwise, discard it too
                     // avoid out of memory errors.
-                    if data.len() < self.max_message_size {
+                    if !too_long {
                         data.push(b);
                     }
-                    // Since we always have 5 bytes in here, this should never fail.
-                    last_5.remove(0).unwrap();
-                    last_5.push(b);
+
+                    // Update our last bytes for later comparison.
+                    if last.len() == end.len() {
+                        last.remove(0).unwrap();
+                    }
+                    last.push(b);
 
                     // Let's see if we have read all the data.
-                    if last_5.as_slice() == end {
+                    if last.as_slice() == end {
+                        // If we didn't have too much data, we'll remove the end form it to clean up.
                         if !too_long {
                             let data_len = data.len();
                             data.truncate(data_len - end.len());
@@ -107,60 +115,41 @@ impl<R: Reader> SmtpStream<R> {
                     }
                 },
                 Err(err) => {
-                    return Err(ReadFailed(err))
+                    return Err(PrivateReadFailed(err))
                 }
             }
         }
         if too_long {
-            Err(TooMuchData)
+            Err(TooLong)
         } else {
             Ok(data)
         }
     }
 
-    /// Read one line of input.
-    pub fn read_line(&mut self) -> Result<Vec<u8>, SmtpStreamError> {
-        let mut data: Vec<u8> = Vec::with_capacity(MAX_LINE_SIZE);
-        let end = [13u8, 10u8]; // CRLF
-        let mut too_long = false;
-        let mut last_2: Vec<u8> = vec!(0u8, 0u8);
-
-        loop {
-            // If we have previously read as much data as possible and still are not finished
-            // reading, stop here.
-            if data.len() >= MAX_LINE_SIZE && !too_long {
-                too_long = true;
-            }
-
-            // Try to get more data and see if we have got it all.
-            let byte_res = self.stream.read_byte();
-            match byte_res {
-                Ok(b) => {
-                    // Only keep remaining data if we are allowed too. Otherwise, discard it too
-                    // avoid out of memory errors.
-                    if data.len() < self.max_message_size {
-                        data.push(b);
-                    }
-                    // Since we always have 2 bytes in here, this should never fail.
-                    last_2.remove(0).unwrap();
-                    last_2.push(b);
-
-                    // Let's see if we have read all the line
-                    if last_2.as_slice() == end {
-                        if !too_long {
-                            let data_len = data.len();
-                            data.truncate(data_len - end.len());
-                        }
-                        break;
-                    }
-                },
-                Err(err) => return Err(ReadFailed(err))
+    /// Read the data section of an email. Ends with "&lt;CRLF&gt;.&lt;CRLF&gt;".
+    pub fn read_data(&mut self) -> Result<Vec<u8>, SmtpStreamError> {
+        let max_data = self.max_message_size;
+        match self.read_until(&[13, 10, 46, 13, 10], max_data) {
+            Ok(data) => Ok(data),
+            Err(err) => {
+                match err {
+                    TooLong => Err(TooMuchData),
+                    PrivateReadFailed(err) => Err(ReadFailed(err))
+                }
             }
         }
-        if too_long {
-            Err(LineTooLong)
-        } else {
-            Ok(data)
+    }
+
+    /// Read one line of input.
+    pub fn read_line(&mut self) -> Result<Vec<u8>, SmtpStreamError> {
+        match self.read_until(&[13, 10], MAX_LINE_SIZE) {
+            Ok(data) => Ok(data),
+            Err(err) => {
+                match err {
+                    TooLong => Err(LineTooLong),
+                    PrivateReadFailed(err) => Err(ReadFailed(err))
+                }
+            }
         }
     }
 
