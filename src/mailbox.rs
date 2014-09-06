@@ -130,7 +130,9 @@ fn test_foreign_part() {
 
 /// Represents an email address, aka "mailbox" in the SMTP spec.
 ///
-/// It is composed of a local part and a foreign part.
+/// It is composed of a local part and a foreign part. If the address is sent to the `Postmaster`
+/// address for a domain, then the local part will always be converted `postmaster`, all lowercase.
+/// Since the `Postmaster` address must be handled without regard for case, this makes things simpler.
 #[deriving(PartialEq, Eq, Clone, Show)]
 pub struct Mailbox {
     local_part: MailboxLocalPart,
