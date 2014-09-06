@@ -29,11 +29,17 @@
 //!     SmtpServerEventHandler,
 //!     SmtpTransaction
 //! };
+//! use rsmtp::mailbox::{Mailbox};
 //!
 //! #[deriving(Clone)]
 //! struct Handler;
 //!
 //! impl SmtpServerEventHandler for Handler {
+//!     fn handle_rcpt(&mut self, transaction: &SmtpTransaction, mailbox: &Mailbox) -> Result<(), ()> {
+//!         println!("Check in a database if this recipient is valid and more if you want.");
+//!         Ok(())
+//!     }
+//!
 //!     fn handle_transaction(&mut self, transaction: &SmtpTransaction) -> Result<(), ()> {
 //!         println!("Save to a database, send to an API, whatever you want :-)");
 //!         Ok(())
