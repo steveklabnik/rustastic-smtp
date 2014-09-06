@@ -83,4 +83,5 @@ cargo test
 
 # License
 
-This project is released under the terms of the MIT license. A copy of the license if available [here](LICENSE).
+Rustastic SMTP is distributed under the terms of the Apache License (Version 2.0).
+See [LICENSE.txt](LICENSE.txt) for more information.
