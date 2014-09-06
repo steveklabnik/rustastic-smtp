@@ -1,5 +1,5 @@
 use std::io::{Reader, Writer, IoErrorKind, InvalidInput};
-use std::string::{String};
+use std::vec::{Vec};
 #[allow(unused_imports)]
 use std::io::{Truncate, Open, Read, Write};
 #[allow(unused_imports)]
@@ -8,13 +8,9 @@ use std::io::fs::{File};
 /// The maximum line size as specified by RFC 5321.
 static MAX_LINE_SIZE: uint = 512;
 
-/// Default minimum data allocation.
-static DATA_ALLOC_SIZE: uint = 512;
-
 #[test]
 fn test_static_vars() {
     assert_eq!(512, MAX_LINE_SIZE);
-    assert_eq!(512, DATA_ALLOC_SIZE);
 }
 
 /// A stream specially made for reading SMTP commands.
@@ -36,33 +32,33 @@ fn test_static_vars() {
 /// println!("{}", smtp.read_line().unwrap());
 /// ```
 pub struct SmtpStream<S> {
-    stream: S,
-    vec: Vec<u8>
+    stream: S
 }
 
 impl<S> SmtpStream<S> {
     /// Create a new `SmtpStream` from another stream.
     pub fn new(inner: S) -> SmtpStream<S> {
         SmtpStream {
-            stream: inner,
-            vec: Vec::with_capacity(MAX_LINE_SIZE)
+            stream: inner
         }
     }
 }
 
 impl<R: Reader> SmtpStream<R> {
     /// Read the data section of an email. Ends with "&lt;CRLF&gt;.&lt;CRLF&gt;".
-    pub fn read_data(&mut self) -> Result<String, IoErrorKind> {
-        let mut data = String::with_capacity(DATA_ALLOC_SIZE);
+    pub fn read_data(&mut self) -> Result<Vec<u8>, IoErrorKind> {
+        let mut data: Vec<u8> = Vec::with_capacity(512);
+        let end = [13u8, 10u8, 46u8, 13u8, 10u8]; // CRLF.CRLF
+        let end_len = end.len();
 
         loop {
             let byte_res = self.stream.read_byte();
             match byte_res {
                 Ok(b) => {
-                    data = data.append(String::from_byte(b).as_slice());
-                    if data.as_slice().ends_with("\r\n.\r\n") {
-                        let len = data.len();
-                        data.truncate(len - 5);
+                    data.push(b);
+                    let data_len = data.len();
+                    if data_len >= end_len && data.slice_from(data_len - end_len) == end {
+                        data.truncate(data_len - end_len);
                         break;
                     }
                 },
@@ -75,12 +71,14 @@ impl<R: Reader> SmtpStream<R> {
     }
 
     /// Read one line of input.
-    pub fn read_line(&mut self) -> Result<String, IoErrorKind> {
-        self.vec.clear();
+    pub fn read_line(&mut self) -> Result<Vec<u8>, IoErrorKind> {
+        let mut data: Vec<u8> = Vec::with_capacity(MAX_LINE_SIZE);
+        let end = [13u8, 10u8]; // CRLF
+        let end_len = end.len();
         loop {
             // If we have previously read 512 bytes and have not found a line,
             // stop here.
-            if self.vec.len() == 512 {
+            if data.len() == 512 {
                 return Err(InvalidInput)
             }
 
@@ -88,21 +86,17 @@ impl<R: Reader> SmtpStream<R> {
             let byte_res = self.stream.read_byte();
             match byte_res {
                 Ok(b) => {
-                    self.vec.push(b);
-                    // A line ends with \r\n (or 13/10 in decimal), so we
-                    // check for these bytes at the end of our buffer.
-                    let len = self.vec.len();
-                    if len >= 2 {
-                        if self.vec[len - 2] == 13 && self.vec[len - 1] == 10 {
-                            return Ok(String::from_utf8_lossy(
-                                self.vec.slice_to(len - 2)
-                            ).into_string());
-                        }
+                    data.push(b);
+                    let data_len = data.len();
+                    if data_len >= end_len && data.slice_from(data_len - end_len) == end {
+                        data.truncate(data_len - end_len);
+                        break;
                     }
                 },
                 Err(err) => return Err(err.kind)
             }
         }
+        Ok(data)
     }
 
 }
@@ -132,7 +126,7 @@ fn test_read_data() {
     path = Path::new("tests/stream/data_ok");
     file = File::open(&path).unwrap();
     stream = SmtpStream::new(file);
-    expected = stream.read_data().unwrap();
+    expected = String::from_utf8_lossy(stream.read_data().unwrap().as_slice()).into_string();
     assert_eq!("Hello world!\nBlabla\n", expected.as_slice());
 }
 
@@ -185,34 +179,34 @@ fn test_read_line() {
     path = Path::new("tests/stream/1line1");
     file = File::open(&path).unwrap();
     stream = SmtpStream::new(file);
-    assert_eq!(stream.read_line().unwrap().as_slice(), "hello world!");
+    assert_eq!(String::from_utf8_lossy(stream.read_line().unwrap().as_slice()).into_string().as_slice(), "hello world!");
     assert!(!stream.read_line().is_ok());
 
     path = Path::new("tests/stream/1line2");
     file = File::open(&path).unwrap();
     stream = SmtpStream::new(file);
-    assert_eq!(stream.read_line().unwrap().as_slice(), "hello world!");
+    assert_eq!(String::from_utf8_lossy(stream.read_line().unwrap().as_slice()).into_string().as_slice(), "hello world!");
     assert!(!stream.read_line().is_ok());
 
     path = Path::new("tests/stream/2lines1");
     file = File::open(&path).unwrap();
     stream = SmtpStream::new(file);
-    assert_eq!(stream.read_line().unwrap().as_slice(), "hello world!");
-    assert_eq!(stream.read_line().unwrap().as_slice(), "bye bye world!");
+    assert_eq!(String::from_utf8_lossy(stream.read_line().unwrap().as_slice()).into_string().as_slice(), "hello world!");
+    assert_eq!(String::from_utf8_lossy(stream.read_line().unwrap().as_slice()).into_string().as_slice(), "bye bye world!");
     assert!(!stream.read_line().is_ok());
 
     expected = String::from_char(62, 'x');
     path = Path::new("tests/stream/xlines1");
     file = File::open(&path).unwrap();
     stream = SmtpStream::new(file);
-    assert_eq!(stream.read_line().unwrap(), expected);
-    assert_eq!(stream.read_line().unwrap(), expected);
-    assert_eq!(stream.read_line().unwrap(), expected);
-    assert_eq!(stream.read_line().unwrap(), expected);
-    assert_eq!(stream.read_line().unwrap(), expected);
-    assert_eq!(stream.read_line().unwrap(), expected);
-    assert_eq!(stream.read_line().unwrap(), expected);
-    assert_eq!(stream.read_line().unwrap(), expected);
-    assert_eq!(stream.read_line().unwrap(), expected);
+    assert_eq!(String::from_utf8_lossy(stream.read_line().unwrap().as_slice()).into_string(), expected);
+    assert_eq!(String::from_utf8_lossy(stream.read_line().unwrap().as_slice()).into_string(), expected);
+    assert_eq!(String::from_utf8_lossy(stream.read_line().unwrap().as_slice()).into_string(), expected);
+    assert_eq!(String::from_utf8_lossy(stream.read_line().unwrap().as_slice()).into_string(), expected);
+    assert_eq!(String::from_utf8_lossy(stream.read_line().unwrap().as_slice()).into_string(), expected);
+    assert_eq!(String::from_utf8_lossy(stream.read_line().unwrap().as_slice()).into_string(), expected);
+    assert_eq!(String::from_utf8_lossy(stream.read_line().unwrap().as_slice()).into_string(), expected);
+    assert_eq!(String::from_utf8_lossy(stream.read_line().unwrap().as_slice()).into_string(), expected);
+    assert_eq!(String::from_utf8_lossy(stream.read_line().unwrap().as_slice()).into_string(), expected);
     assert!(!stream.read_line().is_ok());
 }

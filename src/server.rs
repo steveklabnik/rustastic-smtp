@@ -101,7 +101,7 @@ pub struct SmtpTransaction {
     /// The email address of the sender.
     pub from: Mailbox,
     /// The body of the email.
-    pub data: String,
+    pub data: Vec<u8>,
     /// The current state of the transaction.
     pub state: SmtpTransactionState
 }
@@ -115,7 +115,7 @@ impl SmtpTransaction {
             // Put a default email address. This will never be accessed unless replaced. Also,
             // since "r@r" is valid, we can `unwrap()` safely.
             from: Mailbox::parse("r@r").unwrap(),
-            data: String::new(),
+            data: Vec::new(),
             state: Init
         }
     }
@@ -126,7 +126,7 @@ impl SmtpTransaction {
     pub fn reset(&mut self) {
         self.to = Vec::new();
         self.from = Mailbox::parse("r@r").unwrap();
-        self.data = String::new();
+        self.data = Vec::new();
         if self.state != Init {
             self.state = Helo;
         }
@@ -222,7 +222,7 @@ impl<S: Writer+Reader+Send, A: Acceptor<S>, E: SmtpServerEventHandler+Clone+Send
                     // Find the right handler.
                     // TODO: check the return value and return appropriate error message,
                     // ie "500 Command line too long".
-                    let line = stream.read_line().unwrap();
+                    let line = String::from_utf8_lossy(stream.read_line().unwrap().as_slice()).into_string();
 
                     if local_config.debug {
                         println!("rsmtp: imsg: '{}'", line);
