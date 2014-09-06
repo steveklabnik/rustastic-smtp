@@ -46,12 +46,15 @@
 //!         domain: "rustastic.org",
 //!         port: 25,
 //!         max_recipients: 100,
+//!         max_message_size: 65536,
 //!         debug: true
 //!     };
 //!     let mut server = SmtpServer::new(config, Handler).unwrap();
 //!     server.run();
 //! }
 //! ```
+
+#![feature(macro_rules)]
 
 extern crate libc;
 

@@ -7,12 +7,12 @@ If you are working on this or want on this, please open an issue so that other p
 
 ## Things that are needed now
 
-* Configuration:
-    * Timeouts. See: https://github.com/rust-lang/rust/issues/15802.
-    * Maximum email body size.
-* Use error handler instead of `unwrap`.
+* Support for timeout configuration. See: https://github.com/rust-lang/rust/issues/15802.
+* Log errors instead of just calling `unwrap`. Log file? `write` thread safe?
 * Documentation.
-* More tests.
+* Tests
+	* `SmtpStream` errors.
+	* `SmtpServer*`: any ideas on how to test it?
 
 ## Things worth discussing but needed only later
 
