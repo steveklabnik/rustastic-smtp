@@ -112,8 +112,8 @@ pub struct SmtpTransaction {
     pub domain: String,
     /// A vector of recipients' email addresses.
     pub to: Vec<Mailbox>,
-    /// The email address of the sender.
-    pub from: Mailbox,
+    /// The email address of the sender or `None` if it was `<>`.
+    pub from: Option<Mailbox>,
     /// The body of the email.
     pub data: Vec<u8>,
     /// The current state of the transaction.
@@ -126,9 +126,7 @@ impl SmtpTransaction {
         SmtpTransaction {
             domain: String::new(),
             to: Vec::new(),
-            // Put a default email address. This will never be accessed unless replaced. Also,
-            // since "r@r" is valid, we can `unwrap()` safely.
-            from: Mailbox::parse("r@r").unwrap(),
+            from: None,
             data: Vec::new(),
             state: Init
         }
@@ -139,7 +137,7 @@ impl SmtpTransaction {
     /// This is used when a transaction ends and when `RSET` is sent by the client.
     pub fn reset(&mut self) {
         self.to = Vec::new();
-        self.from = Mailbox::parse("r@r").unwrap();
+        self.from = None;
         self.data = Vec::new();
         if self.state != Init {
             self.state = Helo;
@@ -348,10 +346,18 @@ fn handle_command_mail<S: Writer+Reader, E: SmtpServerEventHandler>(stream: &mut
                        config: &SmtpServerConfig,
                        event_handler: &mut E,
                        line: &str) -> Result<(), ()> {
-    if line.char_at(0) != '<' || line.char_at(line.len() - 1) != '>' {
+    if line.len() < 2 || line.char_at(0) != '<' || line.char_at(line.len() - 1) != '>' {
         stream.write_line("501 Email address invalid, must start with < and end with >").unwrap();
         if config.debug {
             println!("rsmtp: omsg: 501 Email address invalid, must start with < and end with >");
+        }
+        Ok(())
+    } else if line == "<>" {
+        transaction.from = None;
+        transaction.state = Mail;
+        stream.write_line("250 OK").unwrap();
+        if config.debug {
+            println!("rsmtp: omsg: 250 OK");
         }
         Ok(())
     } else {
@@ -367,7 +373,7 @@ fn handle_command_mail<S: Writer+Reader, E: SmtpServerEventHandler>(stream: &mut
             Ok(mailbox) => {
                 match event_handler.handle_mail(&mailbox) {
                     Ok(_) => {
-                        transaction.from = mailbox;
+                        transaction.from = Some(mailbox);
                         transaction.state = Mail;
                         stream.write_line("250 OK").unwrap();
                         if config.debug {

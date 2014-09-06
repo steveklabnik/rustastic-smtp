@@ -11,7 +11,6 @@ If you are working on this or want on this, please open an issue so that other p
     * Timeouts. See: https://github.com/rust-lang/rust/issues/15802.
     * Maximum email body size.
 * Use error handler instead of `unwrap`.
-* Allow empty reverse path, aka `<>`, in `MAIL` command.
 * Documentation.
 * More tests.
 
