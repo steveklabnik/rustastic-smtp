@@ -74,7 +74,6 @@ impl<R: Reader> SmtpStream<R> {
     pub fn read_data(&mut self) -> Result<Vec<u8>, SmtpStreamError> {
         let mut data: Vec<u8> = Vec::with_capacity(512);
         let end = [13u8, 10u8, 46u8, 13u8, 10u8]; // CRLF.CRLF
-        let end_len = end.len();
         let mut too_long = false;
         let mut last_5: Vec<u8> = vec!(0u8, 0u8, 0u8, 0u8, 0u8);
 
@@ -99,9 +98,11 @@ impl<R: Reader> SmtpStream<R> {
                     last_5.push(b);
 
                     // Let's see if we have read all the data.
-                    let data_len = data.len();
-                    if data_len >= end_len && data.slice_from(data_len - end_len) == end {
-                        data.truncate(data_len - end_len);
+                    if last_5.as_slice() == end {
+                        if !too_long {
+                            let data_len = data.len();
+                            data.truncate(data_len - end.len());
+                        }
                         break;
                     }
                 },
@@ -121,7 +122,6 @@ impl<R: Reader> SmtpStream<R> {
     pub fn read_line(&mut self) -> Result<Vec<u8>, SmtpStreamError> {
         let mut data: Vec<u8> = Vec::with_capacity(MAX_LINE_SIZE);
         let end = [13u8, 10u8]; // CRLF
-        let end_len = end.len();
         let mut too_long = false;
         let mut last_2: Vec<u8> = vec!(0u8, 0u8);
 
@@ -146,9 +146,11 @@ impl<R: Reader> SmtpStream<R> {
                     last_2.push(b);
 
                     // Let's see if we have read all the line
-                    let data_len = data.len();
-                    if data_len >= end_len && data.slice_from(data_len - end_len) == end {
-                        data.truncate(data_len - end_len);
+                    if last_2.as_slice() == end {
+                        if !too_long {
+                            let data_len = data.len();
+                            data.truncate(data_len - end.len());
+                        }
                         break;
                     }
                 },
