@@ -29,14 +29,7 @@ fn test_static_vars() {
     assert_eq!(512, MAX_LINE_SIZE);
 }
 
-/// A stream specially made for reading SMTP commands.
-///
-/// It reads lines of input delimited by the &lt;CRLF&gt; sequence and with a maximum
-/// size of 512 bytes, including the command word and the &lt;CRLF&gt; sequence. If
-/// the input is not UTF8, non-UTF8 characters are replaced with `U+FFFD
-/// REPLACEMENT CHARACTER` but no error is returned.
-///
-/// Returns `InvalidInput` if no line is found within 512 bytes of input.
+/// A stream specially made for reading SMTP commands, messages and writing replies.
 ///
 /// # Example
 /// ```no_run
@@ -72,7 +65,7 @@ enum SmtpStreamPrivateError {
     TooLong
 }
 
-impl<S> SmtpStream<S> {
+impl<S: Reader+Writer> SmtpStream<S> {
     /// Create a new `SmtpStream` from another stream.
     pub fn new(inner: S, max_message_size: uint) -> SmtpStream<S> {
         SmtpStream {
@@ -80,9 +73,7 @@ impl<S> SmtpStream<S> {
             max_message_size: max_message_size
         }
     }
-}
 
-impl<R: Reader> SmtpStream<R> {
     fn read_until(&mut self, end: &[u8], limit: uint) -> Result<Vec<u8>, SmtpStreamPrivateError> {
         let mut data: Vec<u8> = Vec::with_capacity(512);
         let mut last: Vec<u8> = Vec::with_capacity(end.len());
@@ -134,7 +125,7 @@ impl<R: Reader> SmtpStream<R> {
         }
     }
 
-    /// Read the data section of an email. Ends with "&lt;CRLF&gt;.&lt;CRLF&gt;".
+    /// Read the data section of an email. Ends with `<CRLF>.<CRLF>`.
     pub fn read_data(&mut self) -> Result<Vec<u8>, SmtpStreamError> {
         let max_data = self.max_message_size;
         match self.read_until(&[13, 10, 46, 13, 10], max_data) {
@@ -148,7 +139,7 @@ impl<R: Reader> SmtpStream<R> {
         }
     }
 
-    /// Read one line of input.
+    /// Read one line of input. Ends with `<CRLF>`.
     pub fn read_line(&mut self) -> Result<Vec<u8>, SmtpStreamError> {
         match self.read_until(&[13, 10], MAX_LINE_SIZE) {
             Ok(data) => Ok(data),
@@ -161,10 +152,7 @@ impl<R: Reader> SmtpStream<R> {
         }
     }
 
-}
-
-impl<W: Writer> SmtpStream<W> {
-    /// Write a line ended with &lt;CRLF&gt;.
+    /// Write a line ended with `<CRLF>`.
     pub fn write_line(&mut self, s: &str) -> Result<(), SmtpStreamError> {
         match self.stream.write_str(format!("{}\r\n", s).as_slice()) {
             Ok(_) => Ok(()),
