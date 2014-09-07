@@ -13,13 +13,9 @@ iterate on ideas together.
 ```rust
 extern crate rsmtp;
 
-use rsmtp::server::{
-    SmtpServer,
-    SmtpServerConfig,
-    SmtpServerEventHandler,
-    SmtpTransaction
-};
-use rsmtp::mailbox::{Mailbox};
+use rsmtp::server::{SmtpServer, SmtpServerEventHandler, SmtpServerConfig};
+use rsmtp::common::transaction::SmtpTransaction;
+use rsmtp::common::mailbox::Mailbox;
 
 #[deriving(Clone)]
 struct Handler;

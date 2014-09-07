@@ -12,11 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::string::{String};
-use super::{utils};
-use std::io::net::{ip};
-use std::from_str::{FromStr};
-use std::ascii::{OwnedAsciiExt};
+use std::string::String;
+use super::utils;
+use std::io::net::ip;
+use std::from_str::FromStr;
+use std::ascii::OwnedAsciiExt;
 
 /// Maximum length of the local part.
 static MAX_MAILBOX_LOCAL_PART_LEN: uint = 64;

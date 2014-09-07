@@ -12,51 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::io::net::tcp::{TcpListener, TcpAcceptor, TcpStream};
-use std::io::{Listener, Acceptor, IoError, Reader, Writer};
-use super::stream::{SmtpStream, LineTooLong, TooMuchData};
-use super::mailbox::{Mailbox};
-use super::{utils};
-use std::sync::{Arc};
-use std::ascii::{OwnedAsciiExt};
+use super::SmtpServerConfig;
+use super::SmtpServerEventHandler;
+use super::super::common::stream::{SmtpStream, TooMuchData};
+use super::super::common::utils;
+use super::super::common::mailbox::Mailbox;
+use super::super::common::transaction::{SmtpTransaction, SmtpTransactionState, Init, Helo, Mail, Rcpt, Data};
 
-/// Hooks into different places of the SMTP server to allow its customization.
-pub trait SmtpServerEventHandler {
-    /// Called after getting a recipient mailbox. If `Err(())` is returned, a 550 response is sent.
-    #[allow(unused_variable)]
-    fn handle_rcpt(&mut self, transaction: &SmtpTransaction, mailbox: &Mailbox) -> Result<(), ()> {
-        Ok(())
-    }
-
-    #[allow(unused_variable)]
-    fn handle_transaction(&mut self, transaction: &SmtpTransaction) -> Result<(), ()> {
-        Ok(())
-    }
-}
-
-/// Represents the configuration of an SMTP server.
-pub struct SmtpServerConfig {
-    /// Maximum number of recipients per SMTP transaction.
-    pub max_recipients: uint,
-    /// Port on which to listen for incoming messages.
-    pub port: u16,
-    /// If `true`, debug messages will be printed to the console during transactions.
-    pub debug: bool,
-    /// The IP on which to `bind (2)` the `TcpListener`.
-    pub ip: &'static str,
-    /// The domain name used to identify the SMTP server.
-    pub domain: &'static str,
-    /// The maximum message size, including headers and ending sequence.
-    pub max_message_size: uint,
-    //pub timeout: uint, // at least 5 minutes
-    //pub max_clients: uint, // maximum clients to handle at any given time
-    //pub max_pending_clients: uint, // maximum clients to put on hold while handling other clients
-}
-
-struct SmtpHandler<S: Writer+Reader, E: SmtpServerEventHandler> {
-    command_start: String,
-    allowed_states: Vec<SmtpTransactionState>,
-    callback: fn(&mut SmtpStream<S>, &mut SmtpTransaction, &SmtpServerConfig, &mut E, &str) -> Result<(), ()>
+pub struct SmtpHandler<S: Writer+Reader, E: SmtpServerEventHandler> {
+    pub command_start: String,
+    pub allowed_states: Vec<SmtpTransactionState>,
+    pub callback: fn(&mut SmtpStream<S>, &mut SmtpTransaction, &SmtpServerConfig, &mut E, &str) -> Result<(), ()>
 }
 
 impl<S: Writer+Reader, E: SmtpServerEventHandler> SmtpHandler<S, E> {
@@ -69,103 +35,10 @@ impl<S: Writer+Reader, E: SmtpServerEventHandler> SmtpHandler<S, E> {
     }
 }
 
-/// Represents an SMTP server which handles client transactions with any kind of stream.
-///
-/// This is useful for testing purposes as we can test the server from a plain text file. It
-/// should not be used for other purposes directly. Use `SmtpServer` instead.
-pub struct SmtpServer<S: 'static+Writer+Reader, A: Acceptor<S>, E: 'static+SmtpServerEventHandler> {
-    // Underlying acceptor that allows accepting client connections to handle them.
-    acceptor: A,
-    config: Arc<SmtpServerConfig>,
-    event_handler: E,
-    handlers: Arc<Vec<SmtpHandler<S, E>>>
-}
-
-/// Represents an error during creation of an SMTP server.
-#[deriving(Show)]
-pub enum SmtpServerError {
-    /// The system call `bind` failed.
-    BindFailed(IoError),
-    /// The system call `listen` failed.
-    ListenFailed(IoError),
-}
-
-#[test]
-fn test_smtp_server_error() {
-    // fail!();
-}
-
-/// Represents the current state of an SMTP transaction.
-///
-/// This is useful for checking if an incoming SMTP command is allowed at any given moment
-/// during an SMTP transaction.
-#[deriving(PartialEq, Eq, Clone)]
-pub enum SmtpTransactionState {
-    Init,
-    Helo,
-    Mail,
-    Rcpt,
-    Data
-}
-
-#[test]
-fn test_smtp_transaction_state() {
-    // fail!();
-}
-
-/// Represents an SMTP transaction.
-pub struct SmtpTransaction {
-    /// Domain name passed via `HELO`/`EHLO`.
-    pub domain: String,
-    /// A vector of recipients' email addresses.
-    pub to: Vec<Mailbox>,
-    /// The email address of the sender or `None` if it was `<>`.
-    pub from: Option<Mailbox>,
-    /// The body of the email.
-    pub data: Vec<u8>,
-    /// The current state of the transaction.
-    pub state: SmtpTransactionState
-}
-
-impl SmtpTransaction {
-    /// Creates a new transaction.
-    pub fn new() -> SmtpTransaction {
-        SmtpTransaction {
-            domain: String::new(),
-            to: Vec::new(),
-            from: None,
-            data: Vec::new(),
-            state: Init
-        }
-    }
-
-    /// Resets the `to`, `from` and `data` fields, as well as the `state` of the transaction.
-    ///
-    /// This is used when a transaction ends and when `RSET` is sent by the client.
-    pub fn reset(&mut self) {
-        self.to = Vec::new();
-        self.from = None;
-        self.data = Vec::new();
-        if self.state != Init {
-            self.state = Helo;
-        }
-    }
-}
-
-#[test]
-fn test_smtp_transaction_new() {
-    // fail!();
-}
-
-#[test]
-fn test_smtp_transaction_reset() {
-    // fail!();
-}
-
-fn get_handlers<S: Writer+Reader, E: SmtpServerEventHandler>() -> Vec<SmtpHandler<S, E>> {
-    let all = &[Init, Helo, Mail, Rcpt, Data];
+pub fn get_handlers<S: Writer+Reader, E: SmtpServerEventHandler>() -> Vec<SmtpHandler<S, E>> {
+    let all = [Init, Helo, Mail, Rcpt, Data];
     let handlers = vec!(
-        SmtpHandler::new("HELO ", &[Init], handle_command_helo),
+        SmtpHandler::new("HELO ", [Init], handle_command_helo),
         SmtpHandler::new("EHLO ", [Init], handle_command_helo),
         SmtpHandler::new("MAIL FROM:", [Helo], handle_command_mail),
         SmtpHandler::new("RCPT TO:", [Mail, Rcpt], handle_command_rcpt),
@@ -178,158 +51,6 @@ fn get_handlers<S: Writer+Reader, E: SmtpServerEventHandler>() -> Vec<SmtpHandle
         SmtpHandler::new("QUIT", all, handle_command_quit)
     );
     handlers
-}
-
-impl<E: SmtpServerEventHandler+Clone+Send> SmtpServer<TcpStream, TcpAcceptor, E> {
-    /// Creates a new SMTP server that listens on `0.0.0.0:2525`.
-    pub fn new(config: SmtpServerConfig, event_handler: E) -> Result<SmtpServer<TcpStream, TcpAcceptor, E>, SmtpServerError> {
-        match TcpListener::bind(config.ip, config.port) {
-            Ok(listener) => {
-                if config.debug {
-                    println!("rsmtp: info: binding on ip {}", config.ip);
-                }
-                match listener.listen() {
-                    Ok(acceptor) => {
-                        if config.debug {
-                            println!("rsmtp: info: listening on port {}", config.port);
-                        }
-                        Ok(SmtpServer::new_from_acceptor(acceptor, config, event_handler))
-                    },
-                    Err(err) => Err(ListenFailed(err))
-                }
-            },
-            Err(err) => Err(BindFailed(err))
-        }
-    }
-}
-
-impl<S: Writer+Reader+Send, A: Acceptor<S>, E: SmtpServerEventHandler+Clone+Send> SmtpServer<S, A, E> {
-    /// Creates a new SMTP server from an `Acceptor` implementor. Useful for testing.
-    pub fn new_from_acceptor(acceptor: A, config: SmtpServerConfig, event_handler: E) -> SmtpServer<S, A, E> {
-        SmtpServer {
-            acceptor: acceptor,
-            config: Arc::new(config),
-            event_handler: event_handler,
-            handlers: Arc::new(get_handlers::<S, E>())
-        }
-    }
-
-    /// Run the SMTP server.
-    pub fn run(&mut self) {
-        for mut stream_res in self.acceptor.incoming() {
-            match stream_res {
-                Ok(stream) => {
-                    let handlers = self.handlers.clone();
-                    let config = self.config.clone();
-                    let mut event_handler = self.event_handler.clone();
-                    spawn(proc() {
-                        let mut stream = SmtpStream::new(stream, config.max_message_size);
-                        // WAIT FOR: https://github.com/rust-lang/rust/issues/15802
-                        //stream.stream.set_deadline(local_config.timeout);
-                        let mut transaction = SmtpTransaction::new();
-
-                        // Send the opening welcome message.
-                        stream.write_line(format!("220 {}", config.domain).as_slice()).unwrap();
-
-                        // Debug arrival of this client.
-                        if config.debug {
-                            println!("rsmtp: omsg: 220 {}", config.domain);
-                        }
-
-                        // Forever, looooop over command lines and handle them.
-                        'main_loop: loop {
-                            match stream.read_line() {
-                                Ok(bytes) => {
-                                    let line = String::from_utf8_lossy(bytes.as_slice()).into_string();
-
-                                    if config.debug {
-                                        println!("rsmtp: imsg: '{}'", line);
-                                    }
-
-                                    // Check if the line is a valid command. If so, do what needs to be done.
-                                    for h in handlers.deref().iter() {
-                                        // Don't check lines shorter than required. This also avoids getting an
-                                        // out of bounds error below.
-                                        if line.len() < h.command_start.len() {
-                                            continue;
-                                        }
-                                        let line_start = line.as_slice().slice_to(h.command_start.len())
-                                            .into_string().into_ascii_upper();
-                                        // Check that the begining of the command matches an existing SMTP
-                                        // command. This could be something like "HELO " or "RCPT TO:".
-                                        if line_start.as_slice().starts_with(h.command_start.as_slice()) {
-                                            if h.allowed_states.contains(&transaction.state) {
-                                                let rest = line.as_slice().slice_from(h.command_start.len());
-                                                // We're good to go!
-                                                (h.callback)(
-                                                    &mut stream,
-                                                    &mut transaction,
-                                                    config.deref(),
-                                                    &mut event_handler,
-                                                    rest
-                                                ).unwrap();
-                                                continue 'main_loop;
-                                            } else {
-                                                // Bad sequence of commands.
-                                                stream.write_line("503 Bad sequence of commands").unwrap();
-                                                // Debug to console.
-                                                if config.debug {
-                                                    println!("rsmtp: omsg: 503 Bad sequence of commands");
-                                                }
-                                                continue 'main_loop;
-                                            }
-                                        }
-                                    }
-                                },
-                                Err(err) => {
-                                    // If the line was too long, notify the client.
-                                    if err == LineTooLong {
-                                        stream.write_line("500 Command line too long, max is 512 bytes").unwrap();
-                                        // Debug to console.
-                                        if config.debug {
-                                            println!("rsmtp: omsg: 500 Command line too long, max is 512 bytes");
-                                        }
-                                        continue 'main_loop;
-                                    } else {
-                                        // If we get here, the error is unexpected. What to do with it?
-                                        fail!(err);
-                                    }
-                                }
-                            }
-                            // No valid command was given.
-                            stream.write_line("500 Command unrecognized").unwrap();
-                            // Debug to console.
-                            if config.debug {
-                                println!("rsmtp: omsg: 500 Command unrecognized");
-                            }
-                        }
-                    });
-                },
-                // Ignore accept error. Is this right? If you think not, please open an issue on Github.
-                _ => {}
-            }
-        }
-    }
-}
-
-#[test]
-fn test_smtp_server_new() {
-    // fail!();
-}
-
-#[test]
-fn test_smtp_server_new_from_acceptor() {
-    // fail!();
-}
-
-#[test]
-fn test_smtp_server_handlers() {
-    // fail!();
-}
-
-#[test]
-fn test_smtp_server_run() {
-    // fail!();
 }
 
 #[allow(unused_variable)]

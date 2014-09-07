@@ -13,11 +13,11 @@
 // limitations under the License.
 
 use std::io::{Reader, Writer, IoError};
-use std::vec::{Vec};
+use std::vec::Vec;
 #[allow(unused_imports)]
 use std::io::{Truncate, Open, Read, Write};
 #[allow(unused_imports)]
-use std::io::fs::{File};
+use std::io::fs::File;
 
 /// The maximum line size as specified by RFC 5321.
 static MAX_LINE_SIZE: uint = 512;
@@ -39,7 +39,7 @@ fn test_static_vars() {
 /// # Example
 /// ```no_run
 /// use std::io::TcpStream;
-/// use rsmtp::stream::SmtpStream;
+/// use rsmtp::common::stream::SmtpStream;
 ///
 /// let mut smtp = SmtpStream::new(TcpStream::connect("127.0.0.1", 2525).unwrap(), 65536);
 ///

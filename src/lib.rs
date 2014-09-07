@@ -23,13 +23,9 @@
 //! ```no_run
 //! extern crate rsmtp;
 //!
-//! use rsmtp::server::{
-//!     SmtpServer,
-//!     SmtpServerConfig,
-//!     SmtpServerEventHandler,
-//!     SmtpTransaction
-//! };
-//! use rsmtp::mailbox::{Mailbox};
+//! use rsmtp::server::{SmtpServer, SmtpServerEventHandler, SmtpServerConfig};
+//! use rsmtp::common::transaction::SmtpTransaction;
+//! use rsmtp::common::mailbox::Mailbox;
 //!
 //! #[deriving(Clone)]
 //! struct Handler;
@@ -60,13 +56,12 @@
 //! }
 //! ```
 
-#![feature(macro_rules)]
+// #![deny(unnecessary_qualification)]
+// #![deny(non_uppercase_statics)]
+// #![deny(unnecessary_typecast)]
+// #![deny(missing_doc)]
+// #![deny(unused_result)]
 
-extern crate libc;
-
-pub mod stream;
-pub mod mailbox;
+pub mod client;
+pub mod common;
 pub mod server;
-
-// This is private at the moment because the API is far from stable.
-mod utils;
