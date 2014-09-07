@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//! Tools for reading/writing from SMTP clients to SMTP servers and vice-versa.
+
 use std::io::{Reader, Writer, IoError};
 use std::vec::Vec;
 #[allow(unused_imports)]
@@ -51,11 +53,16 @@ pub struct SmtpStream<S> {
     max_message_size: uint
 }
 
+/// An error that occurs while reading from or writing to an `SmtpStream`.
 #[deriving(Show, Eq, PartialEq)]
 pub enum SmtpStreamError {
+    /// Reading data from the stream failed.
     ReadFailed(IoError),
+    /// Writing data to the stream failed.
     WriteFailed(IoError),
+    /// Tried to read a line ending with &lt;CRLF&gt;, but it was too long.
     LineTooLong,
+    /// Tried to read a message ending with &lt;CRLF&gt;.&lt;CRLF&gt;, but it was too long.
     TooMuchData
 }
 
@@ -100,7 +107,8 @@ impl<R: Reader> SmtpStream<R> {
 
                     // Update our last bytes for later comparison.
                     if last.len() == end.len() {
-                        last.remove(0).unwrap();
+                        // Remove the first element, but do nothing with it.
+                        match last.remove(0) { _ => {} }
                     }
                     last.push(b);
 

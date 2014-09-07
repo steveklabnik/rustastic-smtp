@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//! Utility functions used in SMTP clients and SMTP servers.
+
 /// Returns a completely unescaped version of a quoted string.
 ///
 /// This is useful for showing the email to a human, as it is easier to read.
@@ -310,7 +312,7 @@ pub fn is_alnum(c: char) -> bool {
 
 #[test]
 fn test_is_alnum() {
-    let mut c = 0 as u8;
+    let mut c = 0;
     while c <= 127 {
         // Keep separate assertions for each range to get better error messages.
         if c >= 'A' as u8 && c <= 'Z' as u8 {
@@ -498,6 +500,8 @@ fn test_get_source_route_len() {
     assert_eq!(16, get_source_route_len("@rust.is,@troll:"));
 }
 
+/// If the string starts with an ipv6 as present in email addresses, ie `[Ipv6:...]`, get its
+/// length. Else return `0`.
 pub fn get_possible_ipv6_len(ip: &str) -> uint {
     if ip.len() < 7 || ip.slice_to(6) != "[Ipv6:" {
         0
@@ -524,6 +528,8 @@ fn test_get_possible_ipv6_len() {
     assert_eq!(0, get_possible_ipv6_len("[Ipv"));
 }
 
+/// If the string starts with an ipv4 as present in email addresses, ie `[...]`, get its
+/// length. Else return `0`.
 pub fn get_possible_ipv4_len(ip: &str) -> uint {
     if ip.len() < 3 || ip.char_at(0) != '[' || ip.char_at(1) > '9' || ip.char_at(1) < '0' {
         0

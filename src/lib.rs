@@ -56,11 +56,11 @@
 //! }
 //! ```
 
-// #![deny(unnecessary_qualification)]
-// #![deny(non_uppercase_statics)]
-// #![deny(unnecessary_typecast)]
-// #![deny(missing_doc)]
-// #![deny(unused_result)]
+#![deny(unnecessary_qualification)]
+#![deny(non_uppercase_statics)]
+#![deny(unnecessary_typecast)]
+#![deny(missing_doc)]
+#![deny(unused_result)]
 
 pub mod client;
 pub mod common;

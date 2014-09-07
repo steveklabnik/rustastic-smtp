@@ -12,6 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//! The `server` module contains things needed to build an SMTP server, but useless for
+//! an SMTP client.
+
 use std::io::net::tcp::{TcpListener, TcpAcceptor, TcpStream};
 use std::io::{Listener, Acceptor, IoError, Reader, Writer};
 use super::common::stream::{SmtpStream, LineTooLong};

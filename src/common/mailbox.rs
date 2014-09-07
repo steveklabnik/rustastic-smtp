@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//! Tools to parse and represent an email address in an SMTP transaction.
+
 use std::string::String;
 use super::utils;
 use std::io::net::ip;
@@ -288,11 +290,11 @@ fn test_mailbox() {
     assert_eq!(path_3.local_part.human_string.as_slice(), "hello");
     assert_eq!(path_3.foreign_part, Domain("rust".into_string()));
 
-    Mailbox::parse(
+    assert!(Mailbox::parse(
         String::from_char(MAX_MAILBOX_LOCAL_PART_LEN, 'a')
             .append("@t.com")
             .as_slice()
-    ).unwrap();
+    ).is_ok());
     assert_eq!(Err(LocalPartTooLong), Mailbox::parse(
         String::from_char(MAX_MAILBOX_LOCAL_PART_LEN + 1, 'a')
             .append("@t.com")
@@ -311,10 +313,10 @@ fn test_mailbox() {
         ("rust@".into_string() + String::from_char(MAX_DOMAIN_LEN + 1, 'a'))
             .as_slice()
     ));
-    Mailbox::parse(
+    assert!(Mailbox::parse(
         ("rust@".into_string() + String::from_char(MAX_MAILBOX_LEN - 5, 'a'))
             .as_slice()
-    ).unwrap();
+    ).is_ok());
     assert_eq!(Err(TooLong), Mailbox::parse(
         ("rust@".into_string() + String::from_char(MAX_MAILBOX_LEN - 4, 'a'))
             .as_slice()

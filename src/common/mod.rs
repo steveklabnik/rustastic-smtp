@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//! The `common` module contains things that can be used by both an SMTP server and an SMTP client.
+
 pub mod stream;
 pub mod mailbox;
 pub mod utils;
