@@ -24,10 +24,10 @@ pub fn unescape_quoted_string(s: &str) -> String {
     // don't go until the end, since the last char is the closing quote
     while i < s.len() - 1 {
         if is_atext(s.char_at(i)) || is_qtext_smtp(s.char_at(i)) {
-            out.push_char(s.char_at(i));
+            out.push(s.char_at(i));
             i += 1;
         } else {
-            out.push_char(s.char_at(i + 1));
+            out.push(s.char_at(i + 1));
             i += 2;
         }
     }
@@ -56,27 +56,27 @@ pub fn simplify_quoted_string(s: &str) -> String {
 
     // If we don't have a dot-string, remove useless escape sequences.
     out = String::with_capacity(s.len());
-    out.push_char('"');
+    out.push('"');
     let mut i = 1u; // Start after the opening quote.
     while i < s.len() - 1 { // End before the closing quote.
         // If we have a regular char, add it.
         if is_qtext_smtp(s.char_at(i)) {
-            out.push_char(s.char_at(i));
+            out.push(s.char_at(i));
             i += 1;
 
         // If we have an escape sequence, check if it is useful or not.
         } else {
             if s.char_at(i + 1) == '"' || s.char_at(i + 1) == '\\' {
-                out.push_char(s.char_at(i));
-                out.push_char(s.char_at(i + 1));
+                out.push(s.char_at(i));
+                out.push(s.char_at(i + 1));
                 i += 2;
             } else {
-                out.push_char(s.char_at(i + 1));
+                out.push(s.char_at(i + 1));
                 i += 2;
             }
         }
     }
-    out.push_char('"');
+    out.push('"');
 
     out
 }

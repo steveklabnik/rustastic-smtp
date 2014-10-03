@@ -290,16 +290,12 @@ fn test_mailbox() {
     assert_eq!(path_3.local_part.human_string.as_slice(), "hello");
     assert_eq!(path_3.foreign_part, Domain("rust".into_string()));
 
-    assert!(Mailbox::parse(
-        String::from_char(MAX_MAILBOX_LOCAL_PART_LEN, 'a')
-            .append("@t.com")
-            .as_slice()
-    ).is_ok());
-    assert_eq!(Err(LocalPartTooLong), Mailbox::parse(
-        String::from_char(MAX_MAILBOX_LOCAL_PART_LEN + 1, 'a')
-            .append("@t.com")
-            .as_slice()
-    ));
+    let mut s = String::from_char(MAX_MAILBOX_LOCAL_PART_LEN, 'a');
+    s.push_str("@t.com");
+    assert!(Mailbox::parse(s.as_slice()).is_ok());
+    let mut s = String::from_char(MAX_MAILBOX_LOCAL_PART_LEN + 1, 'a');
+    s.push_str("@t.com");
+    assert_eq!(Err(LocalPartTooLong), Mailbox::parse(s.as_slice()));
     assert_eq!(Err(LocalPartUnrecognized), Mailbox::parse("t @t.com{"));
     assert_eq!(Err(LocalPartUnrecognized), Mailbox::parse("t "));
     assert_eq!(Err(ForeignPartUnrecognized), Mailbox::parse("t@{}"));
