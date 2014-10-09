@@ -16,8 +16,8 @@
 //! an SMTP client.
 
 use std::io::net::tcp::{TcpListener, TcpAcceptor, TcpStream};
-use std::io::{Listener, Acceptor, IoError, Reader, Writer};
-use super::common::stream::{SmtpStream, LineTooLong};
+use std::io::{Listener, Acceptor, IoError, Reader, Writer, InvalidInput};
+use super::common::stream::{SmtpStream};
 use std::sync::Arc;
 use std::ascii::OwnedAsciiExt;
 use super::common::transaction::SmtpTransaction;
@@ -195,16 +195,19 @@ impl<S: Writer+Reader+Send, A: Acceptor<S>, E: SmtpServerEventHandler+Clone+Send
                                 },
                                 Err(err) => {
                                     // If the line was too long, notify the client.
-                                    if err == LineTooLong {
-                                        stream.write_line("500 Command line too long, max is 512 bytes").unwrap();
-                                        // Debug to console.
-                                        if config.debug {
-                                            println!("rsmtp: omsg: 500 Command line too long, max is 512 bytes");
+                                    match err.kind {
+                                        InvalidInput => {
+                                            stream.write_line("500 Command line too long, max is 512 bytes").unwrap();
+                                            // Debug to console.
+                                            if config.debug {
+                                                println!("rsmtp: omsg: 500 Command line too long, max is 512 bytes");
+                                            }
+                                            continue 'main_loop;
+                                        },
+                                        _ => {
+                                            // If we get here, the error is unexpected. What to do with it?
+                                            fail!(err);
                                         }
-                                        continue 'main_loop;
-                                    } else {
-                                        // If we get here, the error is unexpected. What to do with it?
-                                        fail!(err);
                                     }
                                 }
                             }

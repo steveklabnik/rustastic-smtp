@@ -12,9 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::io::{InvalidInput};
 use super::SmtpServerConfig;
 use super::SmtpServerEventHandler;
-use super::super::common::stream::{SmtpStream, TooMuchData};
+use super::super::common::stream::{SmtpStream};
 use super::super::common::utils;
 use super::super::common::mailbox::Mailbox;
 use super::super::common::transaction::{SmtpTransaction, SmtpTransactionState, Init, Helo, Mail, Rcpt, Data};
@@ -229,14 +230,21 @@ fn handle_command_data<S: Writer+Reader, E: SmtpServerEventHandler>(stream: &mut
                 }
             },
             Err(err) => {
-                if err == TooMuchData {
-                    let msg = format!("552 Too much mail data, max {} bytes", config.max_message_size);
-                    stream.write_line(msg.as_slice()).unwrap();
-                    if config.debug {
-                        println!("rsmtp: omsg: {}", msg);
+                match err.kind {
+                    InvalidInput => {
+                        let msg = format!(
+                            "552 Too much mail data, max {} bytes",
+                            config.max_message_size
+                        );
+                        stream.write_line(msg.as_slice()).unwrap();
+                        if config.debug {
+                            println!("rsmtp: omsg: {}", msg);
+                        }
+                    },
+                    _ => {
+                        // Unexpected error, what do we do?
+                        fail!()
                     }
-                } else {
-                    fail!(err);
                 }
             }
         }

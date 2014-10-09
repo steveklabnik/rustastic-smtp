@@ -240,8 +240,10 @@ pub fn is_atext(c: char) -> bool {
     match c {
         '!' | '#' | '$' | '%' | '&' | '\'' |
         '*' | '+' | '-' | '/' | '=' | '?'  |
-        '^' | '_' | '`' | '{' | '|' | '}'  | '~' |
-        'A' .. 'Z' | 'a' .. 'z' | '0' .. '9' => true,
+        '^' | '_' | '`' | '{' | '|' | '}'  | '~' => true,
+        'A' ... 'Z' => true,
+        'a' ... 'z' => true,
+        '0' ... '9' => true,
         _ => false
     }
 }
@@ -305,7 +307,7 @@ fn test_is_atext() {
 /// Checks if a character is alphanumeric 7 bit ASCII.
 pub fn is_alnum(c: char) -> bool {
     match c {
-        'A' .. 'Z' | 'a' .. 'z' | '0' .. '9' => true,
+        'A' ... 'Z' | 'a' ... 'z' | '0' ... '9' => true,
         _ => false
     }
 }
@@ -381,7 +383,7 @@ fn test_get_quoted_string_len() {
 /// [in RFC 5322](http://tools.ietf.org/html/rfc5322#section-3.2.3).
 pub fn is_qtext_smtp(c: char) -> bool {
     match c as int {
-        32 .. 33 | 35 .. 91 | 93 .. 126 => true,
+        32 ... 33 | 35 ... 91 | 93 ... 126 => true,
         _ => false
     }
 }
