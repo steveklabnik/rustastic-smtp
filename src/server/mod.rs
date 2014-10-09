@@ -97,6 +97,7 @@ fn test_smtp_server_error() {
 impl<E: SmtpServerEventHandler+Clone+Send> SmtpServer<TcpStream, TcpAcceptor, E> {
     /// Creates a new SMTP server that listens on `0.0.0.0:2525`.
     pub fn new(config: SmtpServerConfig, event_handler: E) -> Result<SmtpServer<TcpStream, TcpAcceptor, E>, SmtpServerError> {
+        // TODO: Add config checks to force limits to be spec compliant.
         match TcpListener::bind(config.ip, config.port) {
             Ok(listener) => {
                 if config.debug {

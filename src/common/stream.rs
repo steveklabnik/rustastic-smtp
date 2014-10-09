@@ -64,19 +64,15 @@ pub struct SmtpStream<S> {
     buf: Vec<u8>
 }
 
-// enum EndOfMessageState {
-//     Cr1,
-//     Lf1,
-//     Dot,
-//     Cr2,
-//     Lf2
-// }
-
+// The state of the `<CRLF>` search inside a buffer. See below.
 enum CRLFState {
+    // We are looking for `<CR>`.
     Cr,
+    // We are looking for `<LF>`.
     Lf
 }
 
+// Find the position of the first `<CRLF>` in a buffer.
 fn position_crlf(buf: &[u8]) -> Option<uint> {
     let mut state = Cr;
     let mut index = 0;
@@ -100,43 +96,6 @@ fn position_crlf(buf: &[u8]) -> Option<uint> {
 
     None
 }
-
-// fn position_eom(buf: &[u8]) -> Option<uint> {
-//     let mut state = Cr1;
-//     let mut index = 0;
-
-//     for byte in buf.iter() {
-//         match state {
-//             Cr1 => {
-//                 if byte == &13 {
-//                     state = Lf1;
-//                 }
-//             },
-//             Lf1 => {
-//                 if byte == &10 {
-//                     state = Dot;
-//                 }
-//             },
-//             Dot => {
-//                 if byte == &('.' as u8) {
-//                     state = Cr2;
-//                 }
-//             },
-//             Cr2 => {
-//                 if byte == &13 {
-//                     state = Lf2;
-//                 }
-//             },
-//             Lf2 => {
-//                 if byte == &10 {
-//                     return Some(index);
-//                 }
-//             },
-//         }
-//         index += 1;
-//     }
-//     None
-// }
 
 impl<S: Reader+Writer> SmtpStream<S> {
     /// Create a new `SmtpStream` from another stream.
@@ -215,16 +174,22 @@ impl<S: Reader+Writer> SmtpStream<S> {
         let mut data = Vec::with_capacity(2048);
 
         loop {
-            // TODO: Use `position_eom` instead.
             match self.read_line() {
                 Err(err) => {
                     return Err(err)
                 },
                 Ok(line) => {
-                    // TODO: check for CRLF before dot.
-                    if line.as_slice() == &['.' as u8] {
+                    // Here, we check that we have already got some data, which
+                    // means that we have read a line, which means we have just
+                    // seen `<CRLF>`. And then, we check if the current line
+                    // which we know to end with `<CRLF>` as well contains a
+                    // single dot.
+                    // All in all, this means we check for `<CRLF>.<CRLF>`.
+                    if data.len() != 0 && line.as_slice() == &['.' as u8] {
                         break;
                     }
+                    // TODO: support transparency.
+
                     data.extend(line.into_iter());
                     if data.len() > self.max_message_size {
                         return Err(IoError {

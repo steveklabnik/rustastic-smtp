@@ -7,13 +7,11 @@ If you are working on this or want on this, please open an issue so that other p
 
 ## Things that are needed now
 
+* Switching the utils to using `Option` instead of `return 0` to convey the absence of something. Make unsafe functions `unsafe`.
 * Support for timeout configuration. See: https://github.com/rust-lang/rust/issues/15802.
 * Log errors instead of just calling `unwrap`. Log file? `write` thread safe?
-* Add config checks to force limits to be spec compliant.
-* Switching the utils to using `Option` instead of `return 0` to convey the absence of something. Make unsafe functions `unsafe`.
-* Allow using CRLF.CRLF in an email without it breaking the DATA command.
 * Add "Received" and "Return-Path" headers once the message is saved to a file.
-* Documentation.
+* Make handler receive the body as kind of a stream, to avoid having the entire body in memory.
 * Tests
 	* `SmtpStream` errors.
 	* `SmtpServer*`: any ideas on how to test it?
