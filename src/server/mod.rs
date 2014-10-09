@@ -61,6 +61,8 @@ pub struct SmtpServerConfig {
     pub domain: &'static str,
     /// The maximum message size, including headers and ending sequence.
     pub max_message_size: uint,
+    /// The maximum line size, including `<CRLF>`. At least 1000 per RFC 5321.
+    pub max_line_size: uint,
     //pub timeout: uint, // at least 5 minutes
     //pub max_clients: uint, // maximum clients to handle at any given time
     //pub max_pending_clients: uint, // maximum clients to put on hold while handling other clients
@@ -135,7 +137,7 @@ impl<S: Writer+Reader+Send, A: Acceptor<S>, E: SmtpServerEventHandler+Clone+Send
                     let config = self.config.clone();
                     let mut event_handler = self.event_handler.clone();
                     spawn(proc() {
-                        let mut stream = SmtpStream::new(stream, config.max_message_size);
+                        let mut stream = SmtpStream::new(stream, config.max_message_size, config.max_line_size);
                         // WAIT FOR: https://github.com/rust-lang/rust/issues/15802
                         //stream.stream.set_deadline(local_config.timeout);
                         let mut transaction = SmtpTransaction::new();

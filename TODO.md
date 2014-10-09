@@ -12,7 +12,6 @@ If you are working on this or want on this, please open an issue so that other p
 * Add config checks to force limits to be spec compliant.
 * Switching the utils to using `Option` instead of `return 0` to convey the absence of something. Make unsafe functions `unsafe`.
 * Allow using CRLF.CRLF in an email without it breaking the DATA command.
-* Read `DATA` as lines, not one big chunk. Make lines available in a stream to the event handler. If a line is longer than 1001 (max line + 1 for transparency), abort the connection (simple solution). Save all DATA to a file.
 * Add "Received" and "Return-Path" headers once the message is saved to a file.
 * Documentation.
 * Tests
@@ -22,7 +21,6 @@ If you are working on this or want on this, please open an issue so that other p
 ## Things worth discussing but needed only later
 
 * Handling of mail with a fixed size threadpool?
-* Find a way to avoid a deadlock if the client never sends CRLF at the end of a command or CRLF.CRLF at the end of a message. Currently, this would infinitly discard more data, but still keeping the connection alive.
 * Extension system:
     * Allowed states
     * Add commands
@@ -37,7 +35,6 @@ If you are working on this or want on this, please open an issue so that other p
 
 ## Other ideas
 
-* Make stream readers & writers faster.
 * Make safe (return `Option`) public versions of `MailboxLocalPart` functions.
 * Allow configuring via a configuration file to avoid recompilation.
 * Built in mail handling drivers (PostgreSQL, MySql, etc).

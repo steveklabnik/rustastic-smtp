@@ -16,6 +16,11 @@ extern crate rsmtp;
 use rsmtp::server::{SmtpServer, SmtpServerEventHandler, SmtpServerConfig};
 use rsmtp::common::transaction::SmtpTransaction;
 use rsmtp::common::mailbox::Mailbox;
+use rsmtp::common::{
+    MIN_ALLOWED_MESSAGE_SIZE,
+    MIN_ALLOWED_LINE_SIZE,
+    MIN_ALLOWED_RECIPIENTS
+};
 
 #[deriving(Clone)]
 struct Handler;
@@ -37,8 +42,9 @@ fn main() {
         ip: "0.0.0.0",
         domain: "rustastic.org",
         port: 25,
-        max_recipients: 100,
-        max_message_size: 65536,
+        max_recipients: MIN_ALLOWED_RECIPIENTS,
+        max_message_size: MIN_ALLOWED_MESSAGE_SIZE,
+        max_line_size: MIN_ALLOWED_LINE_SIZE,
         debug: true
     };
     let mut server = SmtpServer::new(config, Handler).unwrap();
