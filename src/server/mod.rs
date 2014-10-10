@@ -26,23 +26,73 @@ use super::common::mailbox::Mailbox;
 mod handler;
 
 /// Hooks into different places of the SMTP server to allow its customization.
+///
+/// The implementor of this trait you pass to your server is cloned for each
+/// new client, which means that you can safely make it have its own fields.
 pub trait SmtpServerEventHandler {
-    /// Called after getting a recipient mailbox.
+    /// Called after getting a HELO command.
+    ///
+    /// This could be used to check if the sender comes from a banned server,
+    /// to log the server information or anything else you desire.
+    ///
+    /// If `Err(())` is returned, the connection is aborted.
+    fn handle_connection(&mut self, server_domain: &str, client_ip: &IpAddr) -> Result<(), ()> {
+        Ok(())
+    }
+
+    /// Called after getting a MAIL command with a sender address.
+    ///
+    /// The sender address is either `Some(Mailbox)` or `None`. If it is `None`,
+    /// it means that the reverse-path (as described in RFC 5321) was null,
+    /// which can happen when an email server sends a delivery failure
+    /// notification.
+    ///
+    /// If `Ok(())` is returned, a 250 response is sent. If `Err(())` is returned, a 550 response
+    /// is sent and the sender is discarded.
+    fn handle_sender_address(&mut self, mailbox: Option<Mailbox>) -> Result<(), ()> {
+        Ok(())
+    }
+
+    /// Called after getting a RCPT command.
     ///
     /// If `Ok(())` is returned, a 250 response is sent. If `Err(())` is returned, a 550 response
     /// is sent and the recipient is discarded.
     #[allow(unused_variable)]
-    fn handle_rcpt(&mut self, transaction: &SmtpTransaction, mailbox: &Mailbox) -> Result<(), ()> {
+    fn handle_receiver_address(&mut self, mailbox: Mailbox) -> Result<(), ()> {
         Ok(())
     }
 
-    /// Called after getting the entire message for this transaction.
+    /// Called when we know the first body part is coming.
     ///
-    /// At this point, the client has not yet been notified of success or failure. If `Ok(())` is
-    /// returned, a success message will be sent, else a `554 Transaction failed` message will be
-    /// be sent and the transaction will be discarded.
-    #[allow(unused_variable)]
-    fn handle_transaction(&mut self, transaction: &SmtpTransaction) -> Result<(), ()> {
+    /// This could be used to initiate a connection to an HTTP API if that's
+    /// where you want to send the body.
+    ///
+    /// If `Err(())` is returned, the connection is aborted.
+    fn handle_body_start(&mut self) -> Result<(), ()> {
+        Ok(())
+    }
+
+    /// Called after getting a part of the body.
+    ///
+    /// This can happen in several cases:
+    ///   * when reading a line of input after a DATA command
+    ///   * when getting a chunck of input after a BDAT command
+    ///
+    /// This can be used to parse the body on the fly or push it to an HTTP
+    /// API or whatever you wish to do.
+    ///
+    /// If `Err(())` is returned, the connection is aborted.
+    fn handle_body_part(&mut self, part: &[u8]) -> Result<(), ()> {
+        Ok(())
+    }
+
+    /// Called after getting the last body part.
+    ///
+    /// If you are sending body parts to an HTTP API, this method could be used
+    /// to close the HTTP client.
+    ///
+    /// If `Err(())` is returned, the connection is aborted.
+    fn handle_body_end(&mut self) -> Result<(), ()> {
         Ok(())
     }
 }
