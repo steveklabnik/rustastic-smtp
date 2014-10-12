@@ -18,18 +18,18 @@ use super::SmtpServerEventHandler;
 use super::super::common::stream::{SmtpStream};
 use super::super::common::utils;
 use super::super::common::mailbox::Mailbox;
-use super::super::common::transaction::{SmtpTransaction, SmtpTransactionState, Init, Helo, Mail, Rcpt, Data};
+use super::super::common::transaction::{SmtpTransactionState, Init, Helo, Mail, Rcpt, Data};
 
 // TODO: make SMTP handlers registerable by the library user so we can easily
 // add commands and make the server extendable.
 pub struct SmtpHandler<S: Writer+Reader, E: SmtpServerEventHandler> {
     pub command_start: String,
     pub allowed_states: Vec<SmtpTransactionState>,
-    pub callback: fn(&mut SmtpStream<S>, &mut SmtpTransaction, &SmtpServerConfig, &mut E, &str) -> Result<(), ()>
+    pub callback: fn(&mut SmtpStream<S>, &mut SmtpTransactionState, &SmtpServerConfig, &mut E, &str) -> Result<(), ()>
 }
 
 impl<S: Writer+Reader, E: SmtpServerEventHandler> SmtpHandler<S, E> {
-    fn new(command_start: &str, allowed_states: &[SmtpTransactionState], callback: fn(&mut SmtpStream<S>, &mut SmtpTransaction, &SmtpServerConfig, &mut E, &str) -> Result<(), ()>) -> SmtpHandler<S, E> {
+    fn new(command_start: &str, allowed_states: &[SmtpTransactionState], callback: fn(&mut SmtpStream<S>, &mut SmtpTransactionState, &SmtpServerConfig, &mut E, &str) -> Result<(), ()>) -> SmtpHandler<S, E> {
         SmtpHandler {
             command_start: command_start.into_string(),
             allowed_states: allowed_states.into_vec(),
@@ -58,7 +58,7 @@ pub fn get_handlers<S: Writer+Reader, E: SmtpServerEventHandler>() -> Vec<SmtpHa
 
 #[allow(unused_variable)]
 fn handle_command_helo<S: Writer+Reader, E: SmtpServerEventHandler>(stream: &mut SmtpStream<S>,
-                       transaction: &mut SmtpTransaction,
+                       state: &mut SmtpTransactionState,
                        config: &SmtpServerConfig,
                        event_handler: &mut E,
                        line: &str) -> Result<(), ()> {
@@ -77,22 +77,20 @@ fn handle_command_helo<S: Writer+Reader, E: SmtpServerEventHandler>(stream: &mut
     } else {
         match event_handler.handle_domain(line) {
             Ok(_) => {
-                transaction.domain = line.into_string();
-                transaction.state = Helo;
+                *state = Helo;
                 stream.write_line("250 OK").unwrap();
                 if config.debug {
                     println!("rsmtp: omsg: 250 OK");
                 }
-                Ok(())
             },
             Err(_) => {
                 stream.write_line("550 Domain not taken").unwrap();
                 if config.debug {
                     println!("rsmtp: omsg: 550 Domain not taken");
                 }
-                Err(())
             }
         }
+        Ok(())
     }
 }
 
@@ -103,7 +101,7 @@ fn test_command_helo() {
 
 #[allow(unused_variable)]
 fn handle_command_mail<S: Writer+Reader, E: SmtpServerEventHandler>(stream: &mut SmtpStream<S>,
-                       transaction: &mut SmtpTransaction,
+                       state: &mut SmtpTransactionState,
                        config: &SmtpServerConfig,
                        event_handler: &mut E,
                        line: &str) -> Result<(), ()> {
@@ -116,28 +114,25 @@ fn handle_command_mail<S: Writer+Reader, E: SmtpServerEventHandler>(stream: &mut
     } else if line == "<>" {
         match event_handler.handle_sender_address(None) {
             Ok(_) => {
-                transaction.from = None;
-                transaction.state = Mail;
+                *state = Mail;
                 stream.write_line("250 OK").unwrap();
                 if config.debug {
                     println!("rsmtp: omsg: 250 OK");
                 }
-                Ok(())
             },
             Err(_) => {
                 stream.write_line("550 Mailbox not available").unwrap();
                 if config.debug {
                     println!("rsmtp: omsg: 550 Mailbox not available");
                 }
-                Err(())
             }
         }
+        Ok(())
     } else {
         let mailbox_res = Mailbox::parse(line.slice(1, line.len() - 1));
         match mailbox_res {
             Err(err) => {
-                stream.write_line(format!("553 Email address invalid: {}", err).as_slice())
-                    .unwrap();
+                stream.write_line(format!("553 Email address invalid: {}", err).as_slice()).unwrap();
                 if config.debug {
                     println!("rsmtp: omsg: 553 Email address invalid: {}", err);
                 }
@@ -145,8 +140,7 @@ fn handle_command_mail<S: Writer+Reader, E: SmtpServerEventHandler>(stream: &mut
             Ok(mailbox) => {
                 match event_handler.handle_sender_address(Some(&mailbox)) {
                     Ok(_) => {
-                        transaction.from = Some(mailbox);
-                        transaction.state = Mail;
+                        *state = Mail;
                         stream.write_line("250 OK").unwrap();
                         if config.debug {
                             println!("rsmtp: omsg: 250 OK");
@@ -172,11 +166,13 @@ fn test_command_mail() {
 
 #[allow(unused_variable)]
 fn handle_command_rcpt<S: Writer+Reader, E: SmtpServerEventHandler>(stream: &mut SmtpStream<S>,
-                       transaction: &mut SmtpTransaction,
+                       state: &mut SmtpTransactionState,
                        config: &SmtpServerConfig,
                        event_handler: &mut E,
                        line: &str) -> Result<(), ()> {
-    if transaction.to.len() >= config.max_recipients {
+    // TODO: check maximum number of recipients? Maybe after the event handler
+    // sends back `Ok(())`?
+    if false {
         stream.write_line("452 Too many recipients").unwrap();
         if config.debug {
             println!("rsmtp: omsg: 452 Too many recipients");
@@ -201,8 +197,7 @@ fn handle_command_rcpt<S: Writer+Reader, E: SmtpServerEventHandler>(stream: &mut
             Ok(mailbox) => {
                 match event_handler.handle_receiver_address(&mailbox) {
                     Ok(_) => {
-                        transaction.to.push(mailbox);
-                        transaction.state = Rcpt;
+                        *state = Rcpt;
                         stream.write_line("250 OK").unwrap();
                         if config.debug {
                             println!("rsmtp: omsg: 250 OK");
@@ -228,7 +223,7 @@ fn test_command_rcpt() {
 
 #[allow(unused_variable)]
 fn handle_command_data<S: Writer+Reader, E: SmtpServerEventHandler>(stream: &mut SmtpStream<S>,
-                       transaction: &mut SmtpTransaction,
+                       state: &mut SmtpTransactionState,
                        config: &SmtpServerConfig,
                        event_handler: &mut E,
                        line: &str) -> Result<(), ()> {
@@ -244,12 +239,11 @@ fn handle_command_data<S: Writer+Reader, E: SmtpServerEventHandler>(stream: &mut
         }
         match stream.read_data() {
             Ok(data) => {
-                transaction.data = data;
-                transaction.state = Data;
+                *state = Data;
                 // // Send an immutable reference of the transaction.
                 // match event_handler.handle_transaction(&*transaction) {
                 //     Ok(_) => {
-                        transaction.reset();
+                        state.reset();
                         stream.write_line("250 OK").unwrap();
                         if config.debug {
                             println!("rsmtp: omsg: 250 OK");
@@ -293,7 +287,7 @@ fn test_command_data() {
 
 #[allow(unused_variable)]
 fn handle_command_rset<S: Writer+Reader, E: SmtpServerEventHandler>(stream: &mut SmtpStream<S>,
-                       transaction: &mut SmtpTransaction,
+                       state: &mut SmtpTransactionState,
                        config: &SmtpServerConfig,
                        event_handler: &mut E,
                        line: &str) -> Result<(), ()> {
@@ -303,7 +297,7 @@ fn handle_command_rset<S: Writer+Reader, E: SmtpServerEventHandler>(stream: &mut
             println!("rsmtp: omsg: 501 No arguments allowed");
         }
     } else {
-        transaction.reset();
+        state.reset();
         stream.write_line("250 OK").unwrap();
         if config.debug {
             println!("rsmtp: omsg: 250 OK");
@@ -319,7 +313,7 @@ fn test_command_rset() {
 
 #[allow(unused_variable)]
 fn handle_command_vrfy<S: Writer+Reader, E: SmtpServerEventHandler>(stream: &mut SmtpStream<S>,
-                       transaction: &mut SmtpTransaction,
+                       state: &mut SmtpTransactionState,
                        config: &SmtpServerConfig,
                        event_handler: &mut E,
                        line: &str) -> Result<(), ()> {
@@ -337,7 +331,7 @@ fn test_command_vrfy() {
 
 #[allow(unused_variable)]
 fn handle_command_expn<S: Writer+Reader, E: SmtpServerEventHandler>(stream: &mut SmtpStream<S>,
-                       transaction: &mut SmtpTransaction,
+                       state: &mut SmtpTransactionState,
                        config: &SmtpServerConfig,
                        event_handler: &mut E,
                        line: &str) -> Result<(), ()> {
@@ -355,7 +349,7 @@ fn test_command_expn() {
 
 #[allow(unused_variable)]
 fn handle_command_help<S: Writer+Reader, E: SmtpServerEventHandler>(stream: &mut SmtpStream<S>,
-                       transaction: &mut SmtpTransaction,
+                       state: &mut SmtpTransactionState,
                        config: &SmtpServerConfig,
                        event_handler: &mut E,
                        line: &str) -> Result<(), ()> {
@@ -380,7 +374,7 @@ fn test_command_help() {
 
 #[allow(unused_variable)]
 fn handle_command_noop<S: Writer+Reader, E: SmtpServerEventHandler>(stream: &mut SmtpStream<S>,
-                       transaction: &mut SmtpTransaction,
+                       state: &mut SmtpTransactionState,
                        config: &SmtpServerConfig,
                        event_handler: &mut E,
                        line: &str) -> Result<(), ()> {
@@ -405,7 +399,7 @@ fn test_command_noop() {
 
 #[allow(unused_variable)]
 fn handle_command_quit<S: Writer+Reader, E: SmtpServerEventHandler>(stream: &mut SmtpStream<S>,
-                       transaction: &mut SmtpTransaction,
+                       state: &mut SmtpTransactionState,
                        config: &SmtpServerConfig,
                        event_handler: &mut E,
                        line: &str) -> Result<(), ()> {

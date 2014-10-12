@@ -21,7 +21,7 @@ use std::io::{Listener, Acceptor, IoError, Reader, Writer, InvalidInput};
 use super::common::stream::{SmtpStream};
 use std::sync::Arc;
 use std::ascii::OwnedAsciiExt;
-use super::common::transaction::SmtpTransaction;
+use super::common::transaction::{Init, Helo, Mail, Rcpt, Data};
 use super::common::mailbox::Mailbox;
 use super::common::{
     MIN_ALLOWED_MESSAGE_SIZE,
@@ -230,7 +230,7 @@ impl<E: SmtpServerEventHandler + Clone + Send> SmtpServer<TcpStream, TcpAcceptor
 
                         // TODO: WAIT FOR: https://github.com/rust-lang/rust/issues/15802
                         //stream.stream.set_deadline(local_config.timeout);
-                        let mut transaction = SmtpTransaction::new();
+                        let mut state = Init;
 
                         // Send the opening welcome message.
                         stream.write_line(format!("220 {}", config.domain).as_slice()).unwrap();
@@ -262,12 +262,12 @@ impl<E: SmtpServerEventHandler + Clone + Send> SmtpServer<TcpStream, TcpAcceptor
                                         // Check that the begining of the command matches an existing SMTP
                                         // command. This could be something like "HELO " or "RCPT TO:".
                                         if line_start.as_slice().starts_with(h.command_start.as_slice()) {
-                                            if h.allowed_states.contains(&transaction.state) {
+                                            if h.allowed_states.contains(&state) {
                                                 let rest = line.as_slice().slice_from(h.command_start.len());
                                                 // We're good to go!
                                                 (h.callback)(
                                                     &mut stream,
-                                                    &mut transaction,
+                                                    &mut state,
                                                     config.deref(),
                                                     &mut event_handler,
                                                     rest
