@@ -16,12 +16,12 @@
 //! an SMTP client.
 
 use std::io::net::tcp::{TcpListener, TcpAcceptor, TcpStream};
-use std::io::net::ip::{SocketAddr, IpAddr};
+use std::io::net::ip::{IpAddr};
 use std::io::{Listener, Acceptor, IoError, Reader, Writer, InvalidInput};
 use super::common::stream::{SmtpStream};
 use std::sync::Arc;
 use std::ascii::OwnedAsciiExt;
-use super::common::transaction::{Init, Helo, Mail, Rcpt, Data};
+use super::common::transaction::{SmtpTransactionState, Init};
 use super::common::mailbox::Mailbox;
 use super::common::{
     MIN_ALLOWED_MESSAGE_SIZE,
@@ -42,6 +42,7 @@ pub trait SmtpServerEventHandler {
     /// to log the server information or anything else you desire.
     ///
     /// If `Err(())` is returned, the connection is aborted.
+    #[allow(unused_variable)]
     fn handle_connection(&mut self, client_ip: &IpAddr) -> Result<(), ()> {
         Ok(())
     }
@@ -49,6 +50,7 @@ pub trait SmtpServerEventHandler {
     /// Called when we know the domain the client identifies itself with.
     ///
     /// If `Err(())` is returned, the connection is aborted.
+    #[allow(unused_variable)]
     fn handle_domain(&mut self, domain: &str) -> Result<(), ()> {
         Ok(())
     }
@@ -62,6 +64,7 @@ pub trait SmtpServerEventHandler {
     ///
     /// If `Ok(())` is returned, a 250 response is sent. If `Err(())` is returned, a 550 response
     /// is sent and the sender is discarded.
+    #[allow(unused_variable)]
     fn handle_sender_address(&mut self, mailbox: Option<&Mailbox>) -> Result<(), ()> {
         Ok(())
     }
@@ -82,6 +85,7 @@ pub trait SmtpServerEventHandler {
     /// where you want to send the body.
     ///
     /// If `Err(())` is returned, the connection is aborted.
+    #[allow(unused_variable)]
     fn handle_body_start(&mut self) -> Result<(), ()> {
         Ok(())
     }
@@ -96,6 +100,7 @@ pub trait SmtpServerEventHandler {
     /// API or whatever you wish to do.
     ///
     /// If `Err(())` is returned, the connection is aborted.
+    #[allow(unused_variable)]
     fn handle_body_part(&mut self, part: &[u8]) -> Result<(), ()> {
         Ok(())
     }
@@ -106,6 +111,7 @@ pub trait SmtpServerEventHandler {
     /// to close the HTTP client.
     ///
     /// If `Err(())` is returned, the connection is aborted.
+    #[allow(unused_variable)]
     fn handle_body_end(&mut self) -> Result<(), ()> {
         Ok(())
     }
@@ -218,102 +224,154 @@ impl<E: SmtpServerEventHandler + Clone + Send> SmtpServer<TcpStream, TcpAcceptor
         for mut stream_res in self.acceptor.incoming() {
             match stream_res {
                 Ok(stream) => {
-                    let handlers = self.handlers.clone();
+                    let mut stream = stream.clone();
                     let config = self.config.clone();
                     let mut event_handler = self.event_handler.clone();
+                    let handlers = self.handlers.clone();
+
                     spawn(proc() {
-                        let mut stream = stream.clone();
-
-                        event_handler.handle_connection(&stream.peer_name().unwrap().ip);
-
-                        let mut stream = SmtpStream::new(stream, config.max_message_size, config.max_line_size);
-
-                        // TODO: WAIT FOR: https://github.com/rust-lang/rust/issues/15802
-                        //stream.stream.set_deadline(local_config.timeout);
-                        let mut state = Init;
-
-                        // Send the opening welcome message.
-                        stream.write_line(format!("220 {}", config.domain).as_slice()).unwrap();
-
-                        // Debug arrival of this client.
-                        if config.debug {
-                            println!("rsmtp: omsg: 220 {}", config.domain);
-                        }
-
-                        // Forever, looooop over command lines and handle them.
-                        'main_loop: loop {
-                            match stream.read_line() {
-                                Ok(bytes) => {
-                                    let line = String::from_utf8_lossy(bytes.as_slice()).into_string();
-
-                                    if config.debug {
-                                        println!("rsmtp: imsg: '{}'", line);
-                                    }
-
-                                    // Check if the line is a valid command. If so, do what needs to be done.
-                                    for h in handlers.deref().iter() {
-                                        // Don't check lines shorter than required. This also avoids getting an
-                                        // out of bounds error below.
-                                        if line.len() < h.command_start.len() {
-                                            continue;
-                                        }
-                                        let line_start = line.as_slice().slice_to(h.command_start.len())
-                                            .into_string().into_ascii_upper();
-                                        // Check that the begining of the command matches an existing SMTP
-                                        // command. This could be something like "HELO " or "RCPT TO:".
-                                        if line_start.as_slice().starts_with(h.command_start.as_slice()) {
-                                            if h.allowed_states.contains(&state) {
-                                                let rest = line.as_slice().slice_from(h.command_start.len());
-                                                // We're good to go!
-                                                (h.callback)(
-                                                    &mut stream,
-                                                    &mut state,
-                                                    config.deref(),
-                                                    &mut event_handler,
-                                                    rest
-                                                ).unwrap();
-                                                continue 'main_loop;
-                                            } else {
-                                                // Bad sequence of commands.
-                                                stream.write_line("503 Bad sequence of commands").unwrap();
-                                                // Debug to console.
-                                                if config.debug {
-                                                    println!("rsmtp: omsg: 503 Bad sequence of commands");
-                                                }
-                                                continue 'main_loop;
-                                            }
-                                        }
-                                    }
-                                },
-                                Err(err) => {
-                                    // If the line was too long, notify the client.
-                                    match err.kind {
-                                        InvalidInput => {
-                                            stream.write_line("500 Command line too long, max is 512 bytes").unwrap();
-                                            // Debug to console.
-                                            if config.debug {
-                                                println!("rsmtp: omsg: 500 Command line too long, max is 512 bytes");
-                                            }
-                                            continue 'main_loop;
-                                        },
-                                        _ => {
-                                            // If we get here, the error is unexpected. What to do with it?
-                                            fail!(err);
-                                        }
-                                    }
-                                }
-                            }
-                            // No valid command was given.
-                            stream.write_line("500 Command unrecognized").unwrap();
-                            // Debug to console.
-                            if config.debug {
-                                println!("rsmtp: omsg: 500 Command unrecognized");
-                            }
-                        }
-                    });
+                        SmtpServer::handle_client(
+                            &mut stream,
+                            config,
+                            &mut event_handler,
+                            handlers
+                        );
+                    })
                 },
                 // Ignore accept error. Is this right? If you think not, please open an issue on Github.
                 _ => {}
+            }
+        }
+    }
+
+    // Handle one client inside a separate thread
+    fn handle_client(
+            stream: &mut TcpStream,
+            config: Arc<SmtpServerConfig>,
+            event_handler: &mut E,
+            handlers: Arc<Vec<handler::SmtpHandler<TcpStream, E>>>) {
+        // TODO: remove unwrap and handle error
+        event_handler.handle_connection(&stream.peer_name().unwrap().ip).unwrap();
+
+        let mut stream = SmtpStream::new(stream.clone(), config.max_line_size, config.debug);
+
+        // TODO: WAIT FOR: https://github.com/rust-lang/rust/issues/15802
+        //stream.stream.set_deadline(local_config.timeout);
+
+        // Send the opening welcome message.
+        stream.write_line(format!("220 {}", config.domain).as_slice()).unwrap();
+        
+
+        // Loop over incoming commands and process them.
+        SmtpServer::inner_loop(
+            &mut stream,
+            config,
+            event_handler,
+            handlers
+        );
+    }
+
+    // Get the right handler for a given command line.
+    fn get_handler_for_line<'a>(
+            handlers: &'a [handler::SmtpHandler<TcpStream, E>],
+            line: &str) -> Option<&'a handler::SmtpHandler<TcpStream, E>> {
+        for h in handlers.iter() {
+            // Don't check lines shorter than required. This also avoids getting an
+            // out of bounds error below.
+            if line.len() < h.command_start.len() {
+                continue;
+            }
+            let line_start = line.as_slice().slice_to(h.command_start.len())
+                .into_string().into_ascii_upper();
+            // Check that the begining of the command matches an existing SMTP
+            // command. This could be something like "HELO " or "RCPT TO:".
+            if line_start.as_slice().starts_with(h.command_start.as_slice()) {
+                return Some(h);
+            }
+        }
+        None
+    }
+
+    fn get_line_and_handler<'a>(
+            stream: &mut SmtpStream<TcpStream>,
+            handlers: &'a [handler::SmtpHandler<TcpStream, E>]) -> Result<(String, Option<&'a handler::SmtpHandler<TcpStream, E>>), IoError> {
+        match stream.read_line() {
+            Ok(bytes) => {
+                let line = String::from_utf8_lossy(bytes.as_slice()).into_string();
+                let handler = SmtpServer::get_handler_for_line(handlers, line.as_slice());
+
+                Ok((line, handler))
+            },
+            Err(err) => {
+                Err(err)
+            }
+        }
+    }
+
+    fn get_reply(
+            stream: &mut SmtpStream<TcpStream>,
+            handlers: &[handler::SmtpHandler<TcpStream, E>],
+            state: &mut SmtpTransactionState,
+            config: &SmtpServerConfig,
+            event_handler: &mut E) -> Result<String, Option<String>> {
+        match SmtpServer::get_line_and_handler(stream, handlers) {
+            Ok((line, Some(handler))) => {
+                if handler.allowed_states.contains(state) {
+                    let rest = line.as_slice().slice_from(handler.command_start.len());
+                    (handler.callback)(
+                        stream,
+                        state,
+                        config,
+                        event_handler,
+                        rest
+                    )
+                } else {
+                    Ok("503 Bad sequence of commands".into_string())
+                }
+            },
+            Ok((_, None)) => {
+                Ok("500 Command unrecognized".into_string())
+            },
+            Err(err) => {
+                // If the line was too long, notify the client.
+                match err.kind {
+                    InvalidInput => {
+                        // TODO: check error desc to make sure this is right
+                        Ok("500 Command line too long, max is 512 bytes".into_string())
+                    },
+                    _ => {
+                        // If we get here, the error is unexpected. What to do with it?
+                        Err(Some(err.to_string()))
+                    }
+                }
+            }
+        }
+    }
+
+    // Forever, looooop over command lines and handle them.
+    fn inner_loop(
+            stream: &mut SmtpStream<TcpStream>,
+            config: Arc<SmtpServerConfig>,
+            event_handler: &mut E,
+            handlers: Arc<Vec<handler::SmtpHandler<TcpStream, E>>>) {
+        // Setup the initial transaction state for this client.
+        let mut state = Init;
+        'main_loop: loop {
+            let reply = SmtpServer::get_reply(
+                stream,
+                handlers.as_slice(),
+                &mut state,
+                config.deref(),
+                event_handler
+            );
+
+            match reply {
+                Ok(msg) => {
+                    stream.write_line(msg.as_slice()).unwrap();
+                },
+                Err(err) => {
+                    fail!(err);
+                }
             }
         }
     }

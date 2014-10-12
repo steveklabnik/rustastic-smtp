@@ -14,8 +14,6 @@
 
 //! Tools for managing the state of a connection between an SMTP client and an SMTP server.
 
-use super::super::common::mailbox::Mailbox;
-
 // TODO: make transaction states extendable, like:
 // Core(Init) and Custom(XMySmtpState) / Custom("X-MY-SMTP-STATE")
 

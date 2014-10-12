@@ -7,8 +7,8 @@ If you are working on this or want on this, please open an issue so that other p
 
 ## Things that are needed now
 
+* Use the return values of event handlers.
 * Update event handler docs.
-* Make handler receive the body as kind of a stream, to avoid having the entire body in memory.
 * Switching the utils to using `Option` instead of `return 0` to convey the absence of something. Make unsafe functions `unsafe`.
 * Support for timeout configuration. See: https://github.com/rust-lang/rust/issues/15802.
 * Log errors instead of just calling `unwrap`. Log file? `write` thread safe?

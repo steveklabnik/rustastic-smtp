@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::io::{InvalidInput};
 use super::SmtpServerConfig;
 use super::SmtpServerEventHandler;
 use super::super::common::stream::{SmtpStream};
@@ -25,14 +24,14 @@ use super::super::common::transaction::{SmtpTransactionState, Init, Helo, Mail, 
 pub struct SmtpHandler<S: Writer+Reader, E: SmtpServerEventHandler> {
     pub command_start: String,
     pub allowed_states: Vec<SmtpTransactionState>,
-    pub callback: fn(&mut SmtpStream<S>, &mut SmtpTransactionState, &SmtpServerConfig, &mut E, &str) -> Result<(), ()>
+    pub callback: fn(&mut SmtpStream<S>, &mut SmtpTransactionState, &SmtpServerConfig, &mut E, &str) -> Result<String, Option<String>>
 }
 
 impl<S: Writer+Reader, E: SmtpServerEventHandler> SmtpHandler<S, E> {
-    fn new(command_start: &str, allowed_states: &[SmtpTransactionState], callback: fn(&mut SmtpStream<S>, &mut SmtpTransactionState, &SmtpServerConfig, &mut E, &str) -> Result<(), ()>) -> SmtpHandler<S, E> {
+    fn new(command_start: &str, allowed_states: &[SmtpTransactionState], callback: fn(&mut SmtpStream<S>, &mut SmtpTransactionState, &SmtpServerConfig, &mut E, &str) -> Result<String, Option<String>>) -> SmtpHandler<S, E> {
         SmtpHandler {
             command_start: command_start.into_string(),
-            allowed_states: allowed_states.into_vec(),
+            allowed_states: allowed_states.to_vec(),
             callback: callback
         }
     }
@@ -61,36 +60,21 @@ fn handle_command_helo<S: Writer+Reader, E: SmtpServerEventHandler>(stream: &mut
                        state: &mut SmtpTransactionState,
                        config: &SmtpServerConfig,
                        event_handler: &mut E,
-                       line: &str) -> Result<(), ()> {
+                       line: &str) -> Result<String, Option<String>> {
     if line.len() == 0 {
-        stream.write_line("501 Domain name not provided").unwrap();
-        if config.debug {
-            println!("rsmtp: omsg: 501 Domain name is invalid");
-        }
-        Ok(())
+        Ok("501 Domain name not provided".into_string())
     } else if utils::get_domain_len(line) != line.len() {
-        stream.write_line("501 Domain name is invalid").unwrap();
-        if config.debug {
-            println!("rsmtp: omsg: 501 Domain name is invalid");
-        }
-        Ok(())
+        Ok("501 Domain name is invalid".into_string())
     } else {
         match event_handler.handle_domain(line) {
             Ok(_) => {
                 *state = Helo;
-                stream.write_line("250 OK").unwrap();
-                if config.debug {
-                    println!("rsmtp: omsg: 250 OK");
-                }
+                Ok("250 OK".into_string())
             },
             Err(_) => {
-                stream.write_line("550 Domain not taken").unwrap();
-                if config.debug {
-                    println!("rsmtp: omsg: 550 Domain not taken");
-                }
+                Ok("550 Domain not taken".into_string())
             }
         }
-        Ok(())
     }
 }
 
@@ -104,58 +88,37 @@ fn handle_command_mail<S: Writer+Reader, E: SmtpServerEventHandler>(stream: &mut
                        state: &mut SmtpTransactionState,
                        config: &SmtpServerConfig,
                        event_handler: &mut E,
-                       line: &str) -> Result<(), ()> {
+                       line: &str) -> Result<String, Option<String>> {
     if line.len() < 2 || line.char_at(0) != '<' || line.char_at(line.len() - 1) != '>' {
-        stream.write_line("501 Email address invalid, must start with < and end with >").unwrap();
-        if config.debug {
-            println!("rsmtp: omsg: 501 Email address invalid, must start with < and end with >");
-        }
-        Ok(())
+        Ok("501 Email address invalid, must start with < and end with >".into_string())
     } else if line == "<>" {
         match event_handler.handle_sender_address(None) {
             Ok(_) => {
                 *state = Mail;
-                stream.write_line("250 OK").unwrap();
-                if config.debug {
-                    println!("rsmtp: omsg: 250 OK");
-                }
+                Ok("250 OK".into_string())
             },
             Err(_) => {
-                stream.write_line("550 Mailbox not available").unwrap();
-                if config.debug {
-                    println!("rsmtp: omsg: 550 Mailbox not available");
-                }
+                Ok("550 Mailnot available".into_string())
             }
         }
-        Ok(())
     } else {
         let mailbox_res = Mailbox::parse(line.slice(1, line.len() - 1));
         match mailbox_res {
             Err(err) => {
-                stream.write_line(format!("553 Email address invalid: {}", err).as_slice()).unwrap();
-                if config.debug {
-                    println!("rsmtp: omsg: 553 Email address invalid: {}", err);
-                }
+                Ok(format!("553 Email address invalid: {}", err))
             },
             Ok(mailbox) => {
                 match event_handler.handle_sender_address(Some(&mailbox)) {
                     Ok(_) => {
                         *state = Mail;
-                        stream.write_line("250 OK").unwrap();
-                        if config.debug {
-                            println!("rsmtp: omsg: 250 OK");
-                        }                        
+                        Ok("250 OK".into_string())
                     },
                     Err(_) => {
-                        stream.write_line("550 Mailbox not taken").unwrap();
-                        if config.debug {
-                            println!("rsmtp: omsg: 550 Mailbox not taken");
-                        }
+                        Ok("550 Mailnot taken".into_string())
                     }
                 }
             }
         }
-        Ok(())
     }
 }
 
@@ -169,50 +132,31 @@ fn handle_command_rcpt<S: Writer+Reader, E: SmtpServerEventHandler>(stream: &mut
                        state: &mut SmtpTransactionState,
                        config: &SmtpServerConfig,
                        event_handler: &mut E,
-                       line: &str) -> Result<(), ()> {
+                       line: &str) -> Result<String, Option<String>> {
     // TODO: check maximum number of recipients? Maybe after the event handler
     // sends back `Ok(())`?
     if false {
-        stream.write_line("452 Too many recipients").unwrap();
-        if config.debug {
-            println!("rsmtp: omsg: 452 Too many recipients");
-        }
-        Ok(())
+        Ok("452 Too many recipients".into_string())
     } else if line.char_at(0) != '<' || line.char_at(line.len() - 1) != '>' {
-        stream.write_line("501 Email address invalid, must start with < and end with >").unwrap();
-        if config.debug {
-            println!("rsmtp: omsg: 501 Email address invalid, must start with < and end with >");
-        }
-        Ok(())
+        Ok("501 Email address invalid, must start with < and end with >".into_string())
     } else {
         let mailbox_res = Mailbox::parse(line.slice(1, line.len() - 1));
         match mailbox_res {
             Err(err) => {
-                stream.write_line(format!("553 Email address invalid: {}", err).as_slice())
-                    .unwrap();
-                if config.debug {
-                    println!("rsmtp: omsg: 553 Email address invalid: {}", err);
-                }
+                Ok(format!("553 Email address invalid: {}", err))
             },
             Ok(mailbox) => {
                 match event_handler.handle_receiver_address(&mailbox) {
                     Ok(_) => {
                         *state = Rcpt;
-                        stream.write_line("250 OK").unwrap();
-                        if config.debug {
-                            println!("rsmtp: omsg: 250 OK");
-                        }
+                        Ok("250 OK".into_string())
                     },
                     Err(_) => {
-                        stream.write_line("550 Mailbox not available").unwrap();
-                        if config.debug {
-                            println!("rsmtp: omsg: 550 Mailbox not available");
-                        }
+                        Ok("550 Mailnot available".into_string())
                     }
                 }
             }
         }
-        Ok(())
     }
 }
 
@@ -226,58 +170,50 @@ fn handle_command_data<S: Writer+Reader, E: SmtpServerEventHandler>(stream: &mut
                        state: &mut SmtpTransactionState,
                        config: &SmtpServerConfig,
                        event_handler: &mut E,
-                       line: &str) -> Result<(), ()> {
+                       line: &str) -> Result<String, Option<String>> {
     if line.len() != 0 {
-        stream.write_line("501 No arguments allowed").unwrap();
-        if config.debug {
-            println!("rsmtp: omsg: 501 No arguments allowed");
-        }
+        Ok("501 No arguments allowed".into_string())
     } else {
         stream.write_line("354 Start mail input; end with <CRLF>.<CRLF>").unwrap();
-        if config.debug {
-            println!("rsmtp: omsg: 354 Start mail input; end with <CRLF>.<CRLF>");
-        }
-        match stream.read_data() {
-            Ok(data) => {
-                *state = Data;
-                // // Send an immutable reference of the transaction.
-                // match event_handler.handle_transaction(&*transaction) {
-                //     Ok(_) => {
-                        state.reset();
-                        stream.write_line("250 OK").unwrap();
-                        if config.debug {
-                            println!("rsmtp: omsg: 250 OK");
-                        }
-                //     },
-                //     Err(_) => {
-                //         stream.write_line("554 Transaction failed").unwrap();
-                //         if config.debug {
-                //             println!("rsmtp: omsg: 554 Transaction failed");
-                //         }
-                //     }
-                // }
-            },
-            Err(err) => {
-                match err.kind {
-                    InvalidInput => {
-                        let msg = format!(
-                            "552 Too much mail data, max {} bytes",
-                            config.max_message_size
-                        );
-                        stream.write_line(msg.as_slice()).unwrap();
-                        if config.debug {
-                            println!("rsmtp: omsg: {}", msg);
-                        }
-                    },
-                    _ => {
-                        // Unexpected error, what do we do?
-                        fail!()
-                    }
+        event_handler.handle_body_start().unwrap();
+        let mut size = 0;
+        loop {
+            let read_line = stream.read_line();
+            let ok = read_line.is_ok();
+
+            if ok {
+                let read_line = read_line.unwrap();
+
+                // Here, we check that we have already got some data, which
+                // means that we have read a line, which means we have just
+                // seen `<CRLF>`. And then, we check if the current line
+                // which we know to end with `<CRLF>` as well contains a
+                // single dot.
+                // All in all, this means we check for `<CRLF>.<CRLF>`.
+                if size != 0 && read_line == &['.' as u8] {
+                    break;
                 }
+                // TODO: support transparency. Here or in the reader ?
+
+                event_handler.handle_body_part(read_line).unwrap();
+
+                size += read_line.len();
+
+                if size > config.max_message_size {
+                    return Ok(format!(
+                        "552 Too much mail data, max {} bytes",
+                        config.max_message_size
+                    ));
+                }
+            } else {
+                return Err(None);
             }
         }
+
+        // We're all good !
+        state.reset();
+        Ok("250 OK".into_string())
     }
-    Ok(())
 }
 
 #[test]
@@ -290,20 +226,13 @@ fn handle_command_rset<S: Writer+Reader, E: SmtpServerEventHandler>(stream: &mut
                        state: &mut SmtpTransactionState,
                        config: &SmtpServerConfig,
                        event_handler: &mut E,
-                       line: &str) -> Result<(), ()> {
+                       line: &str) -> Result<String, Option<String>> {
     if line.len() != 0 {
-        stream.write_line("501 No arguments allowed").unwrap();
-        if config.debug {
-            println!("rsmtp: omsg: 501 No arguments allowed");
-        }
+        Ok("501 No arguments allowed".into_string())
     } else {
         state.reset();
-        stream.write_line("250 OK").unwrap();
-        if config.debug {
-            println!("rsmtp: omsg: 250 OK");
-        }
+        Ok("250 OK".into_string())
     }
-    Ok(())
 }
 
 #[test]
@@ -316,12 +245,8 @@ fn handle_command_vrfy<S: Writer+Reader, E: SmtpServerEventHandler>(stream: &mut
                        state: &mut SmtpTransactionState,
                        config: &SmtpServerConfig,
                        event_handler: &mut E,
-                       line: &str) -> Result<(), ()> {
-    stream.write_line("252 Cannot VRFY user").unwrap();
-    if config.debug {
-        println!("rsmtp: omsg: 252 Cannot VRFY user");
-    }
-    Ok(())
+                       line: &str) -> Result<String, Option<String>> {
+    Ok("252 Cannot VRFY user".into_string())
 }
 
 #[test]
@@ -334,12 +259,8 @@ fn handle_command_expn<S: Writer+Reader, E: SmtpServerEventHandler>(stream: &mut
                        state: &mut SmtpTransactionState,
                        config: &SmtpServerConfig,
                        event_handler: &mut E,
-                       line: &str) -> Result<(), ()> {
-    stream.write_line("252 Cannot EXPN mailing list").unwrap();
-    if config.debug {
-        println!("rsmtp: omsg: 252 Cannot EXPN mailing list");
-    }
-    Ok(())
+                       line: &str) -> Result<String, Option<String>> {
+    Ok("252 Cannot EXPN mailing list".into_string())
 }
 
 #[test]
@@ -352,19 +273,12 @@ fn handle_command_help<S: Writer+Reader, E: SmtpServerEventHandler>(stream: &mut
                        state: &mut SmtpTransactionState,
                        config: &SmtpServerConfig,
                        event_handler: &mut E,
-                       line: &str) -> Result<(), ()> {
+                       line: &str) -> Result<String, Option<String>> {
     if line.len() == 0 || line.char_at(0) == ' ' {
-        stream.write_line("502 Command not implemented").unwrap();
-        if config.debug {
-            println!("rsmtp: omsg: 502 Command not implemented");
-        }
+        Ok("502 Command not implemented".into_string())
     } else {
-        stream.write_line("500 Command unrecognized").unwrap();
-        if config.debug {
-            println!("rsmtp: omsg: 500 Command unrecognized");
-        }
+        Ok("500 Command unrecognized".into_string())
     }
-    Ok(())
 }
 
 #[test]
@@ -377,19 +291,12 @@ fn handle_command_noop<S: Writer+Reader, E: SmtpServerEventHandler>(stream: &mut
                        state: &mut SmtpTransactionState,
                        config: &SmtpServerConfig,
                        event_handler: &mut E,
-                       line: &str) -> Result<(), ()> {
+                       line: &str) -> Result<String, Option<String>> {
     if line.len() == 0 || line.char_at(0) == ' ' {
-        stream.write_line("250 OK").unwrap();
-        if config.debug {
-            println!("rsmtp: omsg: 250 OK");
-        }
+        Ok("250 OK".into_string())
     } else {
-        stream.write_line("500 Command unrecognized").unwrap();
-        if config.debug {
-            println!("rsmtp: omsg: 500 Command unrecognized");
-        }
+        Ok("500 Command unrecognized".into_string())
     }
-    Ok(())
 }
 
 #[test]
@@ -402,12 +309,8 @@ fn handle_command_quit<S: Writer+Reader, E: SmtpServerEventHandler>(stream: &mut
                        state: &mut SmtpTransactionState,
                        config: &SmtpServerConfig,
                        event_handler: &mut E,
-                       line: &str) -> Result<(), ()> {
-    stream.write_line(format!("221 {}", config.domain).as_slice()).unwrap();
-    if config.debug {
-        println!("rsmtp: omsg: 221 {}", config.domain);
-    }
-    Err(())
+                       line: &str) -> Result<String, Option<String>> {
+    Err(Some(format!("221 {}", config.domain)))
 }
 
 #[test]

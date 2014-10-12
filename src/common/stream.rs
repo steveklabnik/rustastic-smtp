@@ -14,17 +14,17 @@
 
 //! Tools for reading/writing from SMTP clients to SMTP servers and vice-versa.
 
-use std::io::{Reader, Writer, IoResult, IoError, InvalidInput, EndOfFile};
+use std::io::{Reader, Writer, IoResult, IoError, InvalidInput};
 use std::vec::Vec;
 #[allow(unused_imports)]
 use std::io::{Truncate, Open, Read, Write};
 #[allow(unused_imports)]
 use std::io::fs::File;
 #[allow(unused_imports)]
-use super::{MIN_ALLOWED_MESSAGE_SIZE, MIN_ALLOWED_LINE_SIZE};
+use super::{MIN_ALLOWED_LINE_SIZE};
 
-static LINE_TOO_LONG: &'static str = "line too long";
-static DATA_TOO_LONG: &'static str = "message too long";
+pub static LINE_TOO_LONG: &'static str = "line too long";
+pub static DATA_TOO_LONG: &'static str = "message too long";
 
 #[test]
 fn test_static_vars() {
@@ -38,14 +38,13 @@ fn test_static_vars() {
 /// use std::io::TcpStream;
 /// use rsmtp::common::stream::SmtpStream;
 /// use rsmtp::common::{
-///     MIN_ALLOWED_MESSAGE_SIZE,
-///     MIN_ALLOWED_LINE_SIZE
+///     MIN_ALLOWED_LINE_SIZE,
 /// };
 ///
 /// let mut smtp = SmtpStream::new(
 ///     TcpStream::connect("127.0.0.1", 25).unwrap(),
-///     MIN_ALLOWED_MESSAGE_SIZE,
-///     MIN_ALLOWED_LINE_SIZE
+///     MIN_ALLOWED_LINE_SIZE,
+///     false
 /// );
 ///
 /// println!("{}", smtp.read_line().unwrap());
@@ -53,15 +52,15 @@ fn test_static_vars() {
 pub struct SmtpStream<S> {
     /// Underlying stream
     stream: S,
-    /// The maximum message size, including headers and ending sequence.
-    max_message_size: uint,
-    /// The maximum message size.
-    ///
     /// Must be at least 1001 per RFC 5321, 1000 chars + 1 for transparency
     /// mechanism.
     max_line_size: uint,
     /// Buffer to make reading more efficient and allow pipelining
-    buf: Vec<u8>
+    buf: Vec<u8>,
+    /// If `true`, will print debug messages of input and output to the console.
+    debug: bool,
+    /// The position of the `<CRLF>` found at the previous `read_line`.
+    last_crlf: Option<uint>
 }
 
 // The state of the `<CRLF>` search inside a buffer. See below.
@@ -99,117 +98,106 @@ fn position_crlf(buf: &[u8]) -> Option<uint> {
 
 impl<S: Reader+Writer> SmtpStream<S> {
     /// Create a new `SmtpStream` from another stream.
-    pub fn new(inner: S, max_message_size: uint, max_line_size: uint) -> SmtpStream<S> {
+    pub fn new(inner: S, max_line_size: uint, debug: bool) -> SmtpStream<S> {
         SmtpStream {
             stream: inner,
-            max_message_size: max_message_size,
             max_line_size: max_line_size,
             // TODO: make line reading work even with a buffer smaller than the maximum line size.
             // Currently, this will not work because we only fill the buffer once per line, assuming
             // that the buffer is large enough.
-            buf: Vec::with_capacity(max_line_size)
+            buf: Vec::with_capacity(max_line_size),
+            debug: debug,
+            last_crlf: None
         }
     }
 
+    /// Remove the previous line from the buffer when reading a new line.
+    fn move_buf(&mut self) {
+        // Remove the last line, since we've used it already by now.
+        match self.last_crlf {
+            Some(p) => {
+                // TODO: This could probably be optimised by shifting bytes instead
+                // of re-allocating.
+                self.buf = self.buf.as_slice().slice_from(p + 2).to_vec();
+                self.buf.reserve(self.max_line_size);
+            },
+            _ => {}
+        }
+
+        self.last_crlf = None;
+    }
+
+    /// Fill the buffer to its limit.
     fn fill_buf(&mut self) -> IoResult<uint> {
         let len = self.buf.len();
         let cap = self.buf.capacity();
 
         // Read as much data as the buffer can hold without re-allocation.
-        match self.stream.push(cap - len, &mut self.buf) {
-            Err(err) => {
-                Err(err)
-            },
-            Ok(data) => {
-                Ok(data)
-            }
-        }
+        let res = self.stream.push(cap - len, &mut self.buf);
+
+        res
     }
 
     /// Read an SMTP command. Ends with `<CRLF>`.
-    pub fn read_line(&mut self) -> IoResult<Vec<u8>> {
-        // First of all, let's see if our buffer has what we need. Maybe it's
-        // that easy :-)
-        match self.find_line() {
-            Ok(line) => Ok(line),
-            Err(_) => {
-                // Try to fill the buffer in the hope we get a line.
+    pub fn read_line(&mut self) -> IoResult<&[u8]> {
+        // Remove the previous line from the buffer before reading a new one.
+        self.move_buf();
+
+        match position_crlf(self.buf.as_slice()) {
+            // First, let's check if the buffer already contains a line. This
+            // reduces the number of syscalls.
+            Some(last_crlf) => {
+                let s = self.buf.slice_to(last_crlf);
+                if self.debug {
+                    println!("rsmtp: imsg: {}", s);
+                }
+                self.last_crlf = Some(last_crlf);
+                Ok(s)
+            },
+            // If we don't have a line in the buffer, we'll read more input
+            // and try again.
+            None => {
                 match self.fill_buf() {
-                    Err(err) => {
-                        // It could be the case, that we've already read everything but
-                        // still have a line left in the buffer, so we need to check if
-                        // that's the case if we get EndOfFile.
-                        match err.kind {
-                            EndOfFile => self.find_line(),
-                            _ => Err(err)
+                    Ok(_) => {
+                        match position_crlf(self.buf.as_slice()) {
+                            Some(last_crlf) => {
+                                let s = self.buf.slice_to(last_crlf);
+                                if self.debug {
+                                    println!("rsmtp: imsg: {}", s);
+                                }
+                                self.last_crlf = Some(last_crlf);
+                                Ok(s)
+                            },
+                            None => {
+                                // If we didn't find a line, it means we had
+                                // no `<CRLF>` in the buffer, which means that
+                                // the line is too long.
+                                Err(IoError {
+                                    kind: InvalidInput,
+                                    desc: LINE_TOO_LONG,
+                                    detail: None
+                                })                                
+                            }
                         }
                     },
-                    // Here, we've read some data, so let's try to find a line.
-                    Ok(_) => {
-                        self.find_line()
+                    Err(err) => {
+                        Err(err)
                     }
-                }
-            }
-        }
-    }
-
-    fn find_line(&mut self) -> IoResult<Vec<u8>> {
-        match position_crlf(self.buf.as_slice()) {
-            Some(p) => {
-                // TODO: This could probably be optimised to use one less alloc, no?
-                let line = self.buf.as_slice().slice_to(p).into_vec();
-                self.buf = self.buf.as_slice().slice_from(p + 2).into_vec();
-                self.buf.reserve(self.max_line_size);
-                Ok(line)
-            }
-            None => {
-                Err(IoError {
-                    kind: InvalidInput,
-                    desc: LINE_TOO_LONG,
-                    detail: None
-                })
-            }
-        }
-    }
-
-    /// Read the email body after a DATA command. Ends with `<CRLF>.<CRLF>`.
-    pub fn read_data(&mut self) -> IoResult<Vec<u8>> {
-        let mut data = Vec::with_capacity(2048);
-
-        loop {
-            match self.read_line() {
-                Err(err) => {
-                    return Err(err)
-                },
-                Ok(line) => {
-                    // Here, we check that we have already got some data, which
-                    // means that we have read a line, which means we have just
-                    // seen `<CRLF>`. And then, we check if the current line
-                    // which we know to end with `<CRLF>` as well contains a
-                    // single dot.
-                    // All in all, this means we check for `<CRLF>.<CRLF>`.
-                    if data.len() != 0 && line.as_slice() == &['.' as u8] {
-                        break;
-                    }
-                    // TODO: support transparency.
-
-                    data.extend(line.into_iter());
-                    if data.len() > self.max_message_size {
-                        return Err(IoError {
-                            kind: InvalidInput,
-                            desc: DATA_TOO_LONG,
-                            detail: None
-                        })
-                    }
-                }
+                }                
             }
         }
 
-        Ok(data)
     }
 
     /// Write a line ended with `<CRLF>`.
     pub fn write_line(&mut self, s: &str) -> IoResult<()> {
+        if self.debug {
+            println!("rsmtp: omsg: {}", s);
+        }
+        // We use `format!()` instead of 2 calls to `write_str()` to reduce
+        // the amount of syscalls and to send the string as a single packet.
+        // I'm not sure if this is the right way to go though. If you think
+        // this is wrong, please open a issue on Github.
         self.stream.write_str(format!("{}\r\n", s).as_slice())
     }
 }
@@ -217,32 +205,6 @@ impl<S: Reader+Writer> SmtpStream<S> {
 #[test]
 fn test_new() {
     // This method is already tested via `test_read_line()`.
-}
-
-#[test]
-fn test_read_data_ok() {
-    let mut path: Path;
-    let mut file: File;
-    let mut stream: SmtpStream<File>;
-    let mut expected: String;
-
-    path = Path::new("tests/stream/data_ok");
-    file = File::open(&path).unwrap();
-    stream = SmtpStream::new(file, MIN_ALLOWED_MESSAGE_SIZE, MIN_ALLOWED_LINE_SIZE);
-    expected = String::from_utf8_lossy(stream.read_data().unwrap().as_slice()).into_string();
-    assert_eq!("Hello world!\nBlabla\n", expected.as_slice());
-}
-
-#[test]
-fn test_read_data_not_ok() {
-    let mut path: Path;
-    let mut file: File;
-    let mut stream: SmtpStream<File>;
-
-    path = Path::new("tests/stream/data_not_ok");
-    file = File::open(&path).unwrap();
-    stream = SmtpStream::new(file, MIN_ALLOWED_MESSAGE_SIZE, MIN_ALLOWED_LINE_SIZE);
-    assert!(!stream.read_data().is_ok());
 }
 
 #[test]
@@ -255,7 +217,7 @@ fn test_write_line() {
 
         path_write = Path::new("tests/stream/write_line");
         file_write = File::open_mode(&path_write, Truncate, Write).unwrap();
-        stream = SmtpStream::new(file_write, MIN_ALLOWED_MESSAGE_SIZE, MIN_ALLOWED_LINE_SIZE);
+        stream = SmtpStream::new(file_write, MIN_ALLOWED_LINE_SIZE, false);
         stream.write_line("HelloWorld").unwrap();
         stream.write_line("ByeBye").unwrap();
     }
@@ -277,22 +239,11 @@ fn test_limits() {
 
     path = Path::new("tests/stream/1line1");
     file = File::open(&path).unwrap();
-    stream = SmtpStream::new(file, MIN_ALLOWED_MESSAGE_SIZE, 3);
+    stream = SmtpStream::new(file, 3, false);
     match stream.read_line() {
         Ok(_) => fail!(),
         Err(err) => {
             assert_eq!("line too long", err.desc);
-            assert_eq!(InvalidInput, err.kind);
-        }
-    }
-
-    path = Path::new("tests/stream/1line1");
-    file = File::open(&path).unwrap();
-    stream = SmtpStream::new(file, 3, MIN_ALLOWED_LINE_SIZE);
-    match stream.read_data() {
-        Ok(_) => fail!(),
-        Err(err) => {
-            assert_eq!("message too long", err.desc);
             assert_eq!(InvalidInput, err.kind);
         }
     }
@@ -307,34 +258,34 @@ fn test_read_line() {
 
     path = Path::new("tests/stream/0line1");
     file = File::open(&path).unwrap();
-    stream = SmtpStream::new(file, MIN_ALLOWED_MESSAGE_SIZE, MIN_ALLOWED_LINE_SIZE);
+    stream = SmtpStream::new(file, MIN_ALLOWED_LINE_SIZE, false);
     assert!(!stream.read_line().is_ok());
 
     path = Path::new("tests/stream/0line2");
     file = File::open(&path).unwrap();
-    stream = SmtpStream::new(file, MIN_ALLOWED_MESSAGE_SIZE, MIN_ALLOWED_LINE_SIZE);
+    stream = SmtpStream::new(file, MIN_ALLOWED_LINE_SIZE, false);
     assert!(!stream.read_line().is_ok());
 
     path = Path::new("tests/stream/0line3");
     file = File::open(&path).unwrap();
-    stream = SmtpStream::new(file, MIN_ALLOWED_MESSAGE_SIZE, MIN_ALLOWED_LINE_SIZE);
+    stream = SmtpStream::new(file, MIN_ALLOWED_LINE_SIZE, false);
     assert!(!stream.read_line().is_ok());
 
     path = Path::new("tests/stream/1line1");
     file = File::open(&path).unwrap();
-    stream = SmtpStream::new(file, MIN_ALLOWED_MESSAGE_SIZE, MIN_ALLOWED_LINE_SIZE);
+    stream = SmtpStream::new(file, MIN_ALLOWED_LINE_SIZE, false);
     assert_eq!(String::from_utf8_lossy(stream.read_line().unwrap().as_slice()).into_string().as_slice(), "hello world!");
     assert!(!stream.read_line().is_ok());
 
     path = Path::new("tests/stream/1line2");
     file = File::open(&path).unwrap();
-    stream = SmtpStream::new(file, MIN_ALLOWED_MESSAGE_SIZE, MIN_ALLOWED_LINE_SIZE);
+    stream = SmtpStream::new(file, MIN_ALLOWED_LINE_SIZE, false);
     assert_eq!(String::from_utf8_lossy(stream.read_line().unwrap().as_slice()).into_string().as_slice(), "hello world!");
     assert!(!stream.read_line().is_ok());
 
     path = Path::new("tests/stream/2lines1");
     file = File::open(&path).unwrap();
-    stream = SmtpStream::new(file, MIN_ALLOWED_MESSAGE_SIZE, MIN_ALLOWED_LINE_SIZE);
+    stream = SmtpStream::new(file, MIN_ALLOWED_LINE_SIZE, false);
     assert_eq!(String::from_utf8_lossy(stream.read_line().unwrap().as_slice()).into_string().as_slice(), "hello world!");
     assert_eq!(String::from_utf8_lossy(stream.read_line().unwrap().as_slice()).into_string().as_slice(), "bye bye world!");
     assert!(!stream.read_line().is_ok());
@@ -342,7 +293,7 @@ fn test_read_line() {
     expected = String::from_char(62, 'x');
     path = Path::new("tests/stream/xlines1");
     file = File::open(&path).unwrap();
-    stream = SmtpStream::new(file, MIN_ALLOWED_MESSAGE_SIZE, MIN_ALLOWED_LINE_SIZE);
+    stream = SmtpStream::new(file, MIN_ALLOWED_LINE_SIZE, false);
     assert_eq!(String::from_utf8_lossy(stream.read_line().unwrap().as_slice()).into_string(), expected);
     assert_eq!(String::from_utf8_lossy(stream.read_line().unwrap().as_slice()).into_string(), expected);
     assert_eq!(String::from_utf8_lossy(stream.read_line().unwrap().as_slice()).into_string(), expected);
