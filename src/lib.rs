@@ -24,25 +24,22 @@
 //! extern crate rsmtp;
 //!
 //! use rsmtp::server::{SmtpServer, SmtpServerEventHandler, SmtpServerConfig};
-//! use rsmtp::common::transaction::SmtpTransaction;
 //! use rsmtp::common::mailbox::Mailbox;
 //! use rsmtp::common::{
 //!     MIN_ALLOWED_MESSAGE_SIZE,
 //!     MIN_ALLOWED_LINE_SIZE,
 //!     MIN_ALLOWED_RECIPIENTS
 //! };
+//! use std::io::net::ip::IpAddr;
 //!
 //! #[deriving(Clone)]
 //! struct Handler;
 //!
 //! impl SmtpServerEventHandler for Handler {
-//!     fn handle_rcpt(&mut self, transaction: &SmtpTransaction, mailbox: &Mailbox) -> Result<(), ()> {
-//!         println!("Check in a database if this recipient is valid and more if you want.");
+//!     fn handle_connection(&mut self, client_ip: &IpAddr) -> Result<(), ()> {
 //!         Ok(())
 //!     }
-//!
-//!     fn handle_transaction(&mut self, transaction: &SmtpTransaction) -> Result<(), ()> {
-//!         println!("Save to a database, send to an API, whatever you want :-)");
+//!     fn handle_sender_address(&mut self, mailbox: Option<&Mailbox>) -> Result<(), ()> {
 //!         Ok(())
 //!     }
 //! }

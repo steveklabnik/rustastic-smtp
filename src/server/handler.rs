@@ -20,6 +20,8 @@ use super::super::common::utils;
 use super::super::common::mailbox::Mailbox;
 use super::super::common::transaction::{SmtpTransaction, SmtpTransactionState, Init, Helo, Mail, Rcpt, Data};
 
+// TODO: make SMTP handlers registerable by the library user so we can easily
+// add commands and make the server extendable.
 pub struct SmtpHandler<S: Writer+Reader, E: SmtpServerEventHandler> {
     pub command_start: String,
     pub allowed_states: Vec<SmtpTransactionState>,
@@ -73,13 +75,24 @@ fn handle_command_helo<S: Writer+Reader, E: SmtpServerEventHandler>(stream: &mut
         }
         Ok(())
     } else {
-        transaction.domain = line.into_string();
-        transaction.state = Helo;
-        stream.write_line("250 OK").unwrap();
-        if config.debug {
-            println!("rsmtp: omsg: 250 OK");
+        match event_handler.handle_domain(line) {
+            Ok(_) => {
+                transaction.domain = line.into_string();
+                transaction.state = Helo;
+                stream.write_line("250 OK").unwrap();
+                if config.debug {
+                    println!("rsmtp: omsg: 250 OK");
+                }
+                Ok(())
+            },
+            Err(_) => {
+                stream.write_line("550 Domain not taken").unwrap();
+                if config.debug {
+                    println!("rsmtp: omsg: 550 Domain not taken");
+                }
+                Err(())
+            }
         }
-        Ok(())
     }
 }
 
@@ -101,13 +114,24 @@ fn handle_command_mail<S: Writer+Reader, E: SmtpServerEventHandler>(stream: &mut
         }
         Ok(())
     } else if line == "<>" {
-        transaction.from = None;
-        transaction.state = Mail;
-        stream.write_line("250 OK").unwrap();
-        if config.debug {
-            println!("rsmtp: omsg: 250 OK");
+        match event_handler.handle_sender_address(None) {
+            Ok(_) => {
+                transaction.from = None;
+                transaction.state = Mail;
+                stream.write_line("250 OK").unwrap();
+                if config.debug {
+                    println!("rsmtp: omsg: 250 OK");
+                }
+                Ok(())
+            },
+            Err(_) => {
+                stream.write_line("550 Mailbox not available").unwrap();
+                if config.debug {
+                    println!("rsmtp: omsg: 550 Mailbox not available");
+                }
+                Err(())
+            }
         }
-        Ok(())
     } else {
         let mailbox_res = Mailbox::parse(line.slice(1, line.len() - 1));
         match mailbox_res {
@@ -119,11 +143,21 @@ fn handle_command_mail<S: Writer+Reader, E: SmtpServerEventHandler>(stream: &mut
                 }
             },
             Ok(mailbox) => {
-                transaction.from = Some(mailbox);
-                transaction.state = Mail;
-                stream.write_line("250 OK").unwrap();
-                if config.debug {
-                    println!("rsmtp: omsg: 250 OK");
+                match event_handler.handle_sender_address(Some(&mailbox)) {
+                    Ok(_) => {
+                        transaction.from = Some(mailbox);
+                        transaction.state = Mail;
+                        stream.write_line("250 OK").unwrap();
+                        if config.debug {
+                            println!("rsmtp: omsg: 250 OK");
+                        }                        
+                    },
+                    Err(_) => {
+                        stream.write_line("550 Mailbox not taken").unwrap();
+                        if config.debug {
+                            println!("rsmtp: omsg: 550 Mailbox not taken");
+                        }
+                    }
                 }
             }
         }
@@ -165,7 +199,7 @@ fn handle_command_rcpt<S: Writer+Reader, E: SmtpServerEventHandler>(stream: &mut
                 }
             },
             Ok(mailbox) => {
-                match event_handler.handle_rcpt(&*transaction, &mailbox) {
+                match event_handler.handle_receiver_address(&mailbox) {
                     Ok(_) => {
                         transaction.to.push(mailbox);
                         transaction.state = Rcpt;
@@ -212,22 +246,22 @@ fn handle_command_data<S: Writer+Reader, E: SmtpServerEventHandler>(stream: &mut
             Ok(data) => {
                 transaction.data = data;
                 transaction.state = Data;
-                // Send an immutable reference of the transaction.
-                match event_handler.handle_transaction(&*transaction) {
-                    Ok(_) => {
+                // // Send an immutable reference of the transaction.
+                // match event_handler.handle_transaction(&*transaction) {
+                //     Ok(_) => {
                         transaction.reset();
                         stream.write_line("250 OK").unwrap();
                         if config.debug {
                             println!("rsmtp: omsg: 250 OK");
                         }
-                    },
-                    Err(_) => {
-                        stream.write_line("554 Transaction failed").unwrap();
-                        if config.debug {
-                            println!("rsmtp: omsg: 554 Transaction failed");
-                        }
-                    }
-                }
+                //     },
+                //     Err(_) => {
+                //         stream.write_line("554 Transaction failed").unwrap();
+                //         if config.debug {
+                //             println!("rsmtp: omsg: 554 Transaction failed");
+                //         }
+                //     }
+                // }
             },
             Err(err) => {
                 match err.kind {

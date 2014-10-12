@@ -104,6 +104,9 @@ impl<S: Reader+Writer> SmtpStream<S> {
             stream: inner,
             max_message_size: max_message_size,
             max_line_size: max_line_size,
+            // TODO: make line reading work even with a buffer smaller than the maximum line size.
+            // Currently, this will not work because we only fill the buffer once per line, assuming
+            // that the buffer is large enough.
             buf: Vec::with_capacity(max_line_size)
         }
     }

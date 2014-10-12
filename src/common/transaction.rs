@@ -16,6 +16,9 @@
 
 use super::super::common::mailbox::Mailbox;
 
+// TODO: make transaction states extendable, like:
+// Core(Init) and Custom(XMySmtpState) / Custom("X-MY-SMTP-STATE")
+
 /// Represents the current state of an SMTP transaction.
 ///
 /// This is useful for checking if an incoming SMTP command is allowed at any given moment
