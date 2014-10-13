@@ -8,6 +8,8 @@ The goal is to eventually comply with the
 If you would like to get involved, feel free to create an issue so we can discuss publicly and
 iterate on ideas together.
 
+**This project is very much a work in progress. I'm planning on releasing a `v1 beta` at about the same time Rust reaches `v1` and stricly respect SemVer from there. Until then, I'll be making breaking changes from time to time.**
+
 # Example
 
 ```rust
