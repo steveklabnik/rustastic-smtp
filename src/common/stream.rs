@@ -143,14 +143,11 @@ impl<S: Reader+Writer> SmtpStream<S> {
         // Remove the previous line from the buffer before reading a new one.
         self.move_buf();
 
-        match position_crlf(self.buf.as_slice()) {
+        let read_line = match position_crlf(self.buf.as_slice()) {
             // First, let's check if the buffer already contains a line. This
             // reduces the number of syscalls.
             Some(last_crlf) => {
                 let s = self.buf.slice_to(last_crlf);
-                if self.debug {
-                    println!("rsmtp: imsg: {}", s);
-                }
                 self.last_crlf = Some(last_crlf);
                 Ok(s)
             },
@@ -162,9 +159,6 @@ impl<S: Reader+Writer> SmtpStream<S> {
                         match position_crlf(self.buf.as_slice()) {
                             Some(last_crlf) => {
                                 let s = self.buf.slice_to(last_crlf);
-                                if self.debug {
-                                    println!("rsmtp: imsg: {}", s);
-                                }
                                 self.last_crlf = Some(last_crlf);
                                 Ok(s)
                             },
@@ -185,8 +179,19 @@ impl<S: Reader+Writer> SmtpStream<S> {
                     }
                 }                
             }
+        };
+
+        // If we read a line, we'll say so in the console, if debug mode is on.
+        match read_line {
+            Ok(bytes) => {
+                if self.debug {
+                    println!("rsmtp: imsg: {}", String::from_utf8_lossy(bytes.as_slice()));
+                }
+            },
+            _ => {}
         }
 
+        read_line
     }
 
     /// Write a line ended with `<CRLF>`.

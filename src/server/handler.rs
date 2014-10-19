@@ -175,7 +175,10 @@ fn handle_command_data<S: Writer+Reader, E: SmtpServerEventHandler>(stream: &mut
         Ok("501 No arguments allowed".into_string())
     } else {
         stream.write_line("354 Start mail input; end with <CRLF>.<CRLF>").unwrap();
+
+        // Inform our event handler that mail data is about to be received.
         event_handler.handle_body_start().unwrap();
+        
         let mut size = 0;
         loop {
             let read_line = stream.read_line();
@@ -200,6 +203,7 @@ fn handle_command_data<S: Writer+Reader, E: SmtpServerEventHandler>(stream: &mut
                 size += read_line.len();
 
                 if size > config.max_message_size {
+                    // TODO: add an error handler in the event handler?
                     return Ok(format!(
                         "552 Too much mail data, max {} bytes",
                         config.max_message_size
@@ -209,6 +213,9 @@ fn handle_command_data<S: Writer+Reader, E: SmtpServerEventHandler>(stream: &mut
                 return Err(None);
             }
         }
+
+        // Inform our event handler that all data has been received.
+        event_handler.handle_body_end().unwrap();
 
         // We're all good !
         state.reset();
