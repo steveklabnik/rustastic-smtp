@@ -10,57 +10,18 @@ iterate on ideas together.
 
 # Example
 
-```rust
-extern crate rsmtp;
+To help you get started and showcase `rsmtp` in action, we have built an [example SMTP server](https://github.com/conradkleinespel/rustastic-smtp-test-server/blob/master/src/main.rs).
 
-use rsmtp::server::{SmtpServer, SmtpServerEventHandler, SmtpServerConfig};
-use rsmtp::common::transaction::SmtpTransaction;
-use rsmtp::common::mailbox::Mailbox;
-use rsmtp::common::{
-    MIN_ALLOWED_MESSAGE_SIZE,
-    MIN_ALLOWED_LINE_SIZE,
-    MIN_ALLOWED_RECIPIENTS
-};
-
-#[deriving(Clone)]
-struct Handler;
-
-impl SmtpServerEventHandler for Handler {
-    fn handle_rcpt(&mut self, transaction: &SmtpTransaction, mailbox: &Mailbox) -> Result<(), ()> {
-        println!("Check in a database if this recipient is valid and more if you want.");
-        Ok(())
-    }
-
-    fn handle_transaction(&mut self, transaction: &SmtpTransaction) -> Result<(), ()> {
-        println!("Save to a database, send to an API, whatever you want :-)");
-        Ok(())
-    }
-}
-
-fn main() {
-    let config = SmtpServerConfig {
-        ip: "0.0.0.0",
-        domain: "rustastic.org",
-        port: 25,
-        max_recipients: MIN_ALLOWED_RECIPIENTS,
-        max_message_size: MIN_ALLOWED_MESSAGE_SIZE,
-        max_line_size: MIN_ALLOWED_LINE_SIZE,
-        debug: true
-    };
-    let mut server = SmtpServer::new(config, Handler).unwrap();
-    server.run();
-}
-```
-
-There is also
-[an example SMTP server](https://github.com/conradkleinespel/rustastic-smtp-test-server), so that
-you can quickly see it running:
+If you want to easily build and run the example SMTP server, you can do that by running the following commands in your terminal:
 ```shell
 git clone https://github.com/conradkleinespel/rustastic-smtp-test-server.git
 cd rustastic-smtp-test-server
 cargo build
-./target/smtp-test-server
+sudo ./target/smtp-test-server
 ```
+
+Note that admin rights are needed to run the server because the default port to listen on is below 1024. If you change the
+server's port in the `src/main.rs` file to something like `2525`, you should not need admin rights anymore.
 
 # Documentation
 
